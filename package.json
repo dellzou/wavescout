@@ -1,0 +1,21 @@
+{
+  "name": "wavescout",
+  "productName": "WaveScout",
+  "version": "1.8.1",
+  "description": "勘波 WaveScout - 平面图无线覆盖规划工具",
+  "main": "electron/main.js",
+  "author": "邹宁 (2004-04-17, 广东广州)",
+  "copyright": "© 2026 邹宁 版权所有 All Rights Reserved. 本软件由邹宁个人独立开发，著作权归作者所有。",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build": "node build/pack.js",
+    "build:portable": "electron-builder --config build/portable.yml --win"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^26.18.0",
+    "electron-packager": "^17.1.2"
+  }
+}

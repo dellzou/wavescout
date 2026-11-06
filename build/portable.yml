@@ -1,0 +1,58 @@
+# ============================================================
+# electron-builder 配置 —— 生成"单文件便携版" exe
+# 用法：npm run build:portable
+# 产物：dist-portable/勘波 WaveScout v1.8.1 便携版.exe
+#
+# 与 build/pack.js（目录版）的区别：
+#   目录版 = exe + 一堆 dll + resources 文件夹，必须整目录拷贝
+#   便携版 = 一个 exe，运行时自解压到 %TEMP%，退出可以选择清理
+# ============================================================
+appId: com.zouning.wavescout
+productName: 勘波 WaveScout
+copyright: Copyright © 2026 邹宁 版权所有 All Rights Reserved.
+
+directories:
+  output: dist-exe
+  buildResources: electron
+
+# 运行时代码全部打进 asar；test/ 断言脚本与文档不进成品
+files:
+  - index.html
+  - package.json
+  - js/**/*
+  - assets/**/*
+  - electron/**/*
+  - "!**/*.md"
+  - "!**/test/**"
+  - "!**/*.log"
+
+asar: true
+compression: maximum
+npmRebuild: false
+
+# 只保留中文和英文语言包：Electron 自带 50+ 种 locale，占 41 MB，
+# 一个中文软件用不到日语/阿拉伯语/越南语的 .pak
+electronLanguages:
+  - zh-CN
+  - en-US
+
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+  icon: electron/icon.ico
+  requestedExecutionLevel: asInvoker
+  legalTrademarks: 勘波 WaveScout
+
+portable:
+  # 解压到 %TEMP%\WaveScout-<版本>
+  #   · 用 ASCII 目录名，避免中文路径在个别机器上出问题
+  #   · 带版本号：不同版本的便携版同时运行时会解压到各自目录，不会互相覆盖崩溃
+  #   ⚠️ 升级版本号时，这一行要同步改（package.json 的 version 改了这里也要改）
+  unpackDirName: WaveScout-1.8.1
+  # 双击运行时显示的启动图（用应用图标即可，不额外做图）
+  splashImage: null
+
+# 产物命名：带上版本号，方便同事之间确认拿到的是哪一版
+artifactName: 勘波 WaveScout v${version} 便携版.${ext}

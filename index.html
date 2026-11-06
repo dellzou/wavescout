@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>勘波 WaveScout · 无线覆盖规划</title>
+<meta name="author" content="邹宁">
+<meta name="description" content="勘波 WaveScout 无线覆盖规划工具 · 作者：邹宁（2004-04-17，广东广州）· © 2026 邹宁 版权所有">
+<meta name="copyright" content="本软件由邹宁个人独立开发，著作权归作者所有。© 2026 邹宁 All Rights Reserved.">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ================= 顶栏 ================= -->
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="2.2"/>
+        <path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 16.2a6 6 0 0 0 0-8.4" />
+        <path d="M4.9 4.9a10 10 0 0 0 0 14.2M19.1 19.1a10 10 0 0 0 0-14.2" />
+      </svg>
+      <div class="brand-txt">
+        <b>勘波</b>
+        <i>WaveScout</i>
+      </div>
+      <span class="ver" id="verBadge" title="关于本软件 / 作者与著作权">v1.8.1</span>
+    </div>
+
+    <div class="divider-v"></div>
+
+    <nav class="menu">
+      <button class="tbtn" id="btnNew">新建</button>
+      <button class="tbtn" id="btnOpen">打开</button>
+      <button class="tbtn" id="btnSave">保存</button>
+      <button class="tbtn" id="btnImport">导入底图</button>
+      <button class="tbtn" id="btnExport">导出</button>
+      <button class="tbtn" id="btnHelp">帮助</button>
+    </nav>
+
+    <div class="grow"></div>
+
+    <div class="seg" id="modeSwitch">
+      <button data-mode="plan" class="on">
+        <svg viewBox="0 0 16 16"><path d="M2 3.5l4-1.5 4 1.5 4-1.5v10l-4 1.5-4-1.5-4 1.5z" fill="none"/><path d="M6 2v10M10 3.5v10"/></svg>
+        平面编辑
+      </button>
+      <button data-mode="device">
+        <svg viewBox="0 0 16 16"><circle cx="8" cy="10" r="1.6"/><path d="M4.6 6.6a4.8 4.8 0 0 0 0 6.8M11.4 13.4a4.8 4.8 0 0 0 0-6.8" fill="none"/><path d="M8 8.4V2" fill="none"/></svg>
+        设备编辑
+      </button>
+    </div>
+
+    <div class="grow"></div>
+
+    <label class="chk" title="显示 / 隐藏热力图">
+      <input type="checkbox" id="heatToggle" checked>
+      <span class="sw"></span>
+      <span class="chk-txt">热力图</span>
+    </label>
+
+    <div class="zoom">
+      <button id="zOut" title="缩小">−</button>
+      <span id="zVal">100%</span>
+      <button id="zIn" title="放大">+</button>
+      <button id="zFit" title="适应窗口"><svg viewBox="0 0 16 16"><path d="M2 6V2h4M14 10v4h-4M2 10v4h4M10 2h4v4" fill="none"/></svg></button>
+    </div>
+
+    <button class="ibtn" id="themeBtn" title="切换明暗主题">
+      <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.2" fill="none"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3.1 3.1l1.1 1.1M11.8 11.8l1.1 1.1M12.9 3.1l-1.1 1.1M4.2 11.8l-1.1 1.1" fill="none"/></svg>
+    </button>
+  </header>
+
+  <!-- ================= 主体 ================= -->
+  <div class="workspace">
+
+    <!-- 左侧栏 -->
+    <aside class="sidebar left" id="leftBar">
+
+      <div class="mode-tip" id="modeTip">平面编辑 · 画墙 / 门 / 窗，Ctrl + 拖动可框选墙体</div>
+
+      <!-- 楼层：项目 → 楼宇 → 楼层（当前楼层就是画布上这一层） -->
+      <section class="sect sect-floor" id="sectFloor">
+        <h3>楼层</h3>
+        <div class="field">
+          <label>楼宇</label>
+          <select id="selBuilding"></select>
+        </div>
+        <div class="field">
+          <label>楼层</label>
+          <select id="selFloor"></select>
+        </div>
+        <div class="floor-ops">
+          <button class="mini-btn" id="btnAddFloor" title="在当前楼宇新增一层，默认接续上一个层号">＋ 楼层</button>
+          <button class="mini-btn" id="btnAddBuilding" title="新增一栋楼宇（自带一层）">＋ 楼宇</button>
+          <button class="mini-btn" id="btnRenameFloor" title="重命名当前楼层">重命名</button>
+          <button class="mini-btn danger" id="btnDelFloor" title="删除当前楼层（每栋至少保留一层）">删除</button>
+        </div>
+      </section>
+
+      <section class="sect">
+        <h3><i class="sect-n">1</i>工具</h3>
+
+        <!-- 平面编辑工具 -->
+        <div class="tools" id="toolsPlan">
+          <button class="tool on" data-tool="select" title="选择 / 移动 (V)">
+            <svg viewBox="0 0 20 20"><path d="M4 2.5l10.5 7.2-4.6.9 2.7 5.2-2.1 1.1-2.7-5.3-3.8 3z"/></svg>
+            <span>选择</span>
+          </button>
+          <button class="tool" data-tool="wall" title="绘制砖墙 (W)">
+            <svg viewBox="0 0 20 20"><rect x="2.5" y="8" width="15" height="4" rx="1"/></svg>
+            <span>砖墙</span>
+          </button>
+          <button class="tool" data-tool="door" title="绘制木门 (D)">
+            <svg viewBox="0 0 20 20"><path d="M4 16V5.5h5.5V16" fill="none"/><path d="M9.5 5.5a10 10 0 0 1 5 5" fill="none" stroke-dasharray="1.5 1.5"/></svg>
+            <span>木门</span>
+          </button>
+          <button class="tool" data-tool="window" title="绘制玻璃窗 (N)">
+            <svg viewBox="0 0 20 20"><rect x="2.5" y="8" width="15" height="4" rx="1" fill="none"/><path d="M2.5 10h15" fill="none"/></svg>
+            <span>玻璃窗</span>
+          </button>
+          <button class="tool" data-tool="column" title="绘制混凝土墙 / 立柱">
+            <svg viewBox="0 0 20 20"><rect x="3" y="7" width="14" height="6" rx="1"/><path d="M6 7v6M13 7v6" fill="none"/></svg>
+            <span>混凝土</span>
+          </button>
+          <button class="tool" data-tool="erase" title="删除对象 (E)">
+            <svg viewBox="0 0 20 20"><path d="M3.5 13.5l7-7 4 4-7 7z" fill="none"/><path d="M8 16.5h8.5" fill="none"/></svg>
+            <span>擦除</span>
+          </button>
+        </div>
+
+        <!-- 设备编辑工具 -->
+        <div class="tools" id="toolsDevice" hidden>
+          <button class="tool on" data-tool="select" title="选择 / 移动 (V)">
+            <svg viewBox="0 0 20 20"><path d="M4 2.5l10.5 7.2-4.6.9 2.7 5.2-2.1 1.1-2.7-5.3-3.8 3z"/></svg>
+            <span>选择</span>
+          </button>
+          <button class="tool" data-tool="ap-ceiling" title="放置吸顶全向 AP">
+            <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="3.2" fill="none"/><path d="M10 2v2.6M10 15.4V18M2 10h2.6M15.4 10H18M4.4 4.4l1.8 1.8M13.8 13.8l1.8 1.8M15.6 4.4l-1.8 1.8M6.2 13.8l-1.8 1.8" fill="none"/></svg>
+            <span>吸顶</span>
+          </button>
+          <button class="tool" data-tool="ap-wall" title="放置壁挂定向 AP">
+            <svg viewBox="0 0 20 20"><path d="M3 16V4M3 7a13 13 0 0 1 13 9" fill="none"/><path d="M3 11a9 9 0 0 1 9 5" fill="none" opacity=".55"/></svg>
+            <span>壁挂</span>
+          </button>
+          <button class="tool" data-tool="ap-panel" title="放置面板入墙 AP">
+            <svg viewBox="0 0 20 20"><rect x="3" y="3" width="6" height="14" rx="1" fill="none"/><path d="M9 10a8 8 0 0 1 8 6" fill="none"/><path d="M9 5a8 8 0 0 1 8 6" fill="none" opacity=".5"/></svg>
+            <span>面板</span>
+          </button>
+        </div>
+
+        <!-- 画线辅助：开关 + 强度，平面编辑时才有 -->
+        <div class="aids-title">画线辅助</div>
+
+        <!-- 框选范围提示：随模式变化，明确当前只能框选什么 -->
+        <div class="sel-hint" id="selHint">Ctrl + 拖动框选<b>墙体</b> · 本模式仅墙体可选</div>
+
+        <!-- 平面编辑辅助开关（默认全开，可随时关掉） -->
+        <div class="aids" id="aidsBar">
+          <button class="aid on" data-aid="snap" title="画线时自动吸附（强度可调，默认 8 px，0 = 关闭）">吸附</button>
+          <button class="aid on" data-aid="snapEdge" title="端点自动贴到已有墙的交点或墙上，画过头 / 差一截都会自动对齐">墙线吸附</button>
+          <button class="aid on" data-aid="ortho" title="接近水平 / 垂直时自动拉直（强度可调，默认 ±9.1°）">直线修正</button>
+          <button class="aid on" data-aid="edgePan" title="画线拖到视图边缘时自动平移视图，方便一条线画到底">边缘滚屏</button>
+        </div>
+
+        <!-- 辅助强度：0 = 完全关闭该效果，中间值 = 默认手感 -->
+        <div class="aid-sliders" id="aidSliders">
+          <div class="aid-slider" data-slider="snap">
+            <div class="as-head"><span>吸附强度</span><b id="snapVal">8 px</b></div>
+            <div class="as-body">
+              <i>0</i>
+              <input type="range" id="snapRange" min="0" max="16" step="1" value="8"
+                     title="吸附半径：0 = 完全不吸附，16 px = 最粘（默认 8 px 在正中间）；同时作用于端点与墙线吸附">
+              <i>16 px</i>
+            </div>
+          </div>
+          <div class="aid-slider" data-slider="ortho">
+            <div class="as-head"><span>直线修正强度</span><b id="orthoVal">9.1°</b></div>
+            <div class="as-body">
+              <i>0°</i>
+              <input type="range" id="orthoRange" min="0" max="32" step="1" value="16"
+                     title="拉直阈值：0 = 完全不修正，17.7° = 最激进（默认 9.1° 在正中间）">
+              <i>17.7°</i>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 平面编辑：底图与比例 -->
+      <section class="sect" id="sectPlan">
+        <h3><i class="sect-n">2</i>底图与比例</h3>
+
+        <button class="wide-btn" id="btnPickImage">
+          <svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none"/><circle cx="5.5" cy="6" r="1.2"/><path d="M2 12l3.8-3.6 2.6 2.4 2.2-2 3.4 3.2" fill="none"/></svg>
+          选择平面图图片
+        </button>
+
+        <div class="field">
+          <label>图片宽度</label>
+          <div class="frow">
+            <input type="number" id="calWidth" min="0.1" step="0.5" placeholder="米">
+            <span class="unit">m</span>
+            <button class="mini-btn" id="btnCalWidth" title="按整幅图宽标定">标定</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>两点标定</label>
+          <div class="frow">
+            <button class="mini-btn wide" id="btnCalTwo">在图上标定比例尺</button>
+          </div>
+          <div class="hint" id="calHint">在平面上点两点 → 输入真实距离</div>
+        </div>
+
+        <div class="scalebox">
+          <div class="sb-l"><span id="scaleVal">5.00</span> cm / px</div>
+          <div class="sb-r" id="scaleRef">未标定</div>
+        </div>
+      </section>
+
+      <!-- 设备编辑：无线参数 -->
+      <section class="sect" id="sectDevice" hidden>
+        <h3><i class="sect-n">2</i>无线参数</h3>
+
+        <div class="field">
+          <label>射频区域</label>
+          <div class="seg-mini" id="segRegion">
+            <button data-region="CN" class="on">中国</button>
+            <button data-region="AU">澳大利亚</button>
+          </div>
+          <div class="hint" id="regionHint">中国 · SRRC</div>
+        </div>
+
+        <div class="field-2">
+          <div class="field">
+            <label>频段</label>
+            <select id="selBand">
+              <option value="24">2.4 GHz</option>
+              <option value="5">5 GHz</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>信道</label>
+            <select id="selChannel"></select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>频宽</label>
+          <select id="selBw"></select>
+          <div class="hint" id="rfHint">—</div>
+        </div>
+
+        <div class="field-2">
+          <div class="field">
+            <label>吸顶高度</label>
+            <div class="frow"><input type="number" id="hCeil" min="1" max="12" step="0.1"><span class="unit">m</span></div>
+          </div>
+          <div class="field">
+            <label>终端高度</label>
+            <div class="frow"><input type="number" id="hRx" min="0" max="3" step="0.1"><span class="unit">m</span></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>环境衰减指数 n</label>
+          <div class="frow">
+            <input type="range" id="plN" min="2" max="4.5" step="0.1">
+            <span class="unit" id="plNVal">2.8</span>
+          </div>
+          <div class="hint">开阔办公 2.6~2.9 · 多隔断 3.0~3.4 · 密集货架 / 机房 3.5 以上</div>
+        </div>
+
+        <div class="field">
+          <label id="threshLabel">覆盖判定门限（2.4 GHz）</label>
+          <div class="frow">
+            <input type="range" id="thresh" min="-85" max="-50" step="1" value="-65">
+            <span class="unit" id="threshVal">-65</span>
+          </div>
+        </div>
+
+        <div class="stat" id="statBox">
+          <div class="stat-row"><span>AP 数量</span><b id="stApCount">0</b></div>
+          <div class="stat-row"><span>有效覆盖面积</span><b id="stCover">0 m²</b></div>
+          <div class="stat-row"><span>良好覆盖 ≥ -67</span><b id="stGood">0%</b></div>
+          <div class="stat-row"><span>弱信号 / 盲区</span><b id="stWeak">0%</b></div>
+        </div>
+
+        <div class="band-bars" id="bandStats"></div>
+      </section>
+
+      <section class="sect">
+        <h3><i class="sect-n">3</i>图层</h3>
+        <label class="layer-row"><input type="checkbox" id="layHeat" checked><span>热力图</span><kbd class="lhk">Alt+1</kbd></label>
+        <label class="layer-row"><input type="checkbox" id="layObs" checked><span>障碍物</span><kbd class="lhk">Alt+2</kbd></label>
+        <label class="layer-row"><input type="checkbox" id="layAp" checked><span>无线设备</span><kbd class="lhk">Alt+3</kbd></label>
+        <label class="layer-row"><input type="checkbox" id="layGrid" checked><span>米制网格</span><kbd class="lhk">Alt+4</kbd></label>
+        <label class="layer-row"><input type="checkbox" id="layBeam"><span>天线方向图</span><kbd class="lhk">Alt+5</kbd></label>
+        <label class="layer-row" title="显示同信道 AP 的信号重叠区域（黑框 + 斜线）">
+          <input type="checkbox" id="layOverlap"><span>信号重叠</span><kbd class="lhk">Alt+6</kbd>
+        </label>
+
+        <div class="ov-thr" id="ovBox">
+          <div class="as-head"><span>重叠判定阈值</span><b id="ovThrVal">-67 dBm</b></div>
+          <div class="as-body">
+            <i>-80</i>
+            <input type="range" id="ovThr" min="-80" max="-50" step="1" value="-67"
+                   title="两侧信号都必须高于该值才算同频干扰；调低则重叠区变大">
+            <i>-50</i>
+          </div>
+          <div class="hint" id="ovStat">勾选后计算：仅同信道、且两侧都高于阈值的区域</div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- 画布舞台 -->
+    <main class="stage" id="stage">
+      <canvas id="cv"></canvas>
+
+      <div class="empty" id="emptyState">
+        <div class="empty-card">
+          <svg viewBox="0 0 64 64" class="empty-ico">
+            <rect x="6" y="10" width="52" height="44" rx="4" fill="none" stroke-width="2"/>
+            <path d="M6 42l14-13 10 9 8-7 20 17" fill="none" stroke-width="2"/>
+            <circle cx="22" cy="23" r="4" fill="none" stroke-width="2"/>
+          </svg>
+          <h2>导入一张平面图开始</h2>
+          <div class="steps">
+            <div class="step"><i>1</i><b>导入图纸</b><span>拖入平面图，或选一张</span></div>
+            <div class="step"><i>2</i><b>标定比例</b><span>点两点输入真实米数</span></div>
+            <div class="step"><i>3</i><b>画墙放 AP</b><span>看热力图与重叠区</span></div>
+          </div>
+          <p>支持 JPG / PNG / BMP / WEBP，没有图纸也可以先用空白画布试算。</p>
+          <div class="empty-btns">
+            <button class="primary" id="btnEmptyPick">选择图片</button>
+            <button class="ghost" id="btnEmptyBlank">空白画布</button>
+            <button class="ghost" id="btnEmptyDemo">载入示例</button>
+          </div>
+          <div class="empty-sub">支持 JPG · PNG · BMP · WEBP · GIF</div>
+        </div>
+      </div>
+
+      <div class="hud" id="hud" hidden>
+        <div><span>坐标</span><b id="hudXY">—</b></div>
+        <div><span>信号</span><b id="hudRssi">—</b></div>
+        <div><span>距离</span><b id="hudDist">—</b></div>
+      </div>
+
+      <div class="legend" id="legend" hidden>
+        <div class="legend-title">信号强度 (dBm)</div>
+        <div class="legend-items" id="legendItems"></div>
+      </div>
+
+      <div class="tip" id="tipBar" hidden></div>
+    </main>
+
+    <!-- 右侧属性栏 -->
+    <aside class="sidebar right" id="inspector">
+      <div class="insp-head">
+        <h3 id="inspTitle">属性</h3>
+        <span class="badge" id="inspBadge">—</span>
+      </div>
+      <div class="insp-body" id="inspBody">
+        <div class="insp-empty">未选中任何对象<br><i>在画布上点击可选择</i></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ================= 状态栏 ================= -->
+  <footer class="statusbar">
+    <span class="sb-item" id="stProject">未命名项目</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item dim" id="stFloor" title="当前编辑的楼宇 / 楼层">A 栋 · 1F</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item dim" id="stHint">就绪</span>
+    <div class="grow"></div>
+    <span class="sb-item dim" id="stObjCount">砖墙 0 · 混凝土 0 · 玻璃窗 0 · 木门 0 · AP 0</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item dim" id="stRf" title="当前项目的信道与频宽">—</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item dim" id="stScale">1 px = 5.00 cm</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item dim" id="stZoom">100%</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item dim" id="stCopyright" title="本软件由邹宁个人独立开发，著作权归作者所有">© 2026 邹宁</span>
+  </footer>
+</div>
+
+<!-- 隐藏的输入 -->
+<input type="file" id="fileImage" accept="image/*" hidden>
+<input type="file" id="fileProject" accept=".json,.wssurvey,application/json" hidden>
+
+<!-- ================= 通用弹窗 ================= -->
+<div class="modal-mask" id="modalMask" hidden>
+  <div class="modal" id="modal">
+    <div class="modal-head"><h3 id="modalTitle">提示</h3><button class="modal-x" id="modalX">×</button></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

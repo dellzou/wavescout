@@ -1,0 +1,73 @@
+勘波 WaveScout 软件许可协议
+WaveScout Software License
+
+版权所有 © 2026 邹宁（Zou Ning）。保留所有权利。
+Copyright © 2026 Zou Ning. All Rights Reserved.
+
+本软件（含源代码、可执行文件、文档与界面设计，以下统称「本软件」）
+由邹宁个人独立开发，著作权归作者本人所有。
+
+────────────────────────────────────────
+一、无需申请即可进行的用途
+────────────────────────────────────────
+
+1. 阅读、下载、克隆本仓库的源代码；
+2. 在个人环境中安装、运行本软件，用于学习、研究与技术评估；
+3. 在非商业项目中免费使用本软件；
+4. 引用本项目的名称、截图或技术思路进行介绍、评测或教学，
+   但需注明出处并保留本许可与版权声明。
+
+────────────────────────────────────────
+二、需要事先获得书面授权的情形
+────────────────────────────────────────
+
+1. 将本软件（含其修改版本）用于商业用途，包括但不限于
+   对外承接项目、投标、交付客户、作为服务的一部分提供；
+2. 再分发本软件，包括上传到其他下载站、应用商店、
+   软件集合包或以任何形式提供给第三方；
+3. 修改本软件后对外发布或分发；
+4. 将本软件整体或实质性部分并入其他产品或项目；
+5. 移除、遮蔽或篡改本软件中的版权声明、作者署名与许可信息。
+
+────────────────────────────────────────
+三、免责声明
+────────────────────────────────────────
+
+本软件按「现状」提供，不附带任何明示或默示的担保，
+包括但不限于对适销性、特定用途适用性与不侵权的担保。
+
+本软件是无线覆盖的**估算工具**，其计算结果基于简化的传播模型，
+不构成对实际无线覆盖效果、工程可行性或合规性的任何承诺。
+使用者应自行验证结果，并自行承担使用本软件及其结果的全部风险。
+
+在法律允许的最大范围内，作者不对因使用或无法使用本软件
+而产生的任何直接、间接、附带或后果性损失承担责任。
+
+本软件内置的射频区域预设值（中国 SRRC、澳大利亚 ACMA）
+整理自公开法规，仅作规划参考，不替代当地合规认证。
+实际部署请以当地最新法规为准。
+
+────────────────────────────────────────
+四、其他
+────────────────────────────────────────
+
+本许可未明示授予的权利，均由作者保留。
+如需上述未授权的用途，请与作者联系协商单独授权。
+
+作者联系方式：https://xiaozou123.cn
+
+────────────────────────────────────────
+
+English Summary (for reference only; the Chinese text above prevails)
+
+This software is source-available, NOT open source.
+
+Permitted without permission: reading and cloning the source code,
+personal and non-commercial use, quoting with attribution.
+
+Requires prior written permission: commercial use, redistribution,
+publishing modified versions, or incorporating into other products.
+
+Provided "AS IS", without warranty of any kind. The software is an
+estimation tool; its output is not a guarantee of real-world coverage,
+engineering feasibility, or regulatory compliance.

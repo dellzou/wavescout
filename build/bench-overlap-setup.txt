@@ -1,0 +1,110 @@
+(function () {
+  var S = WS.state;
+  var box = document.getElementById('layOverlap');
+  box.checked = true;
+  box.dispatchEvent(new Event('change', { bubbles: true }));
+
+  var c2 = document.createElement('canvas');
+  c2.width = 1600; c2.height = 1600;
+  var g = c2.getContext('2d');
+
+  /* 用真实的斜线图案填充，尽量贴近 drawOverlap 的实际开销 */
+  var pc = document.createElement('canvas');
+  pc.width = 8; pc.height = 8;
+  var pg = pc.getContext('2d');
+  pg.strokeStyle = '#000'; pg.lineWidth = 1;
+  pg.beginPath(); pg.moveTo(-2, 10); pg.lineTo(10, -2); pg.stroke();
+  var patt = g.createPattern(pc, 'repeat');
+
+  function build(polys) {
+    var path = new Path2D();
+    for (var i = 0; i < polys.length; i++) {
+      var p = polys[i];
+      if (p.length < 3) continue;
+      path.moveTo(p[0].x, p[0].y);
+      for (var j = 1; j < p.length; j++) path.lineTo(p[j].x, p[j].y);
+      path.closePath();
+    }
+    return path;
+  }
+
+  function timeIt(polys, n) {
+    var path = build(polys);                 /* 构造只做一次，单独计时 */
+    var t0 = performance.now();
+    for (var i = 0; i < n; i++) {
+      g.fillStyle = patt;
+      g.fill(path, 'evenodd');
+      g.strokeStyle = '#111';
+      g.lineWidth = 1.6;
+      g.stroke(path);
+    }
+    var draw = (performance.now() - t0) / n;
+
+    var t1 = performance.now();
+    for (var k = 0; k < n; k++) build(polys);
+    var bld = (performance.now() - t1) / n;
+    return { draw: +draw.toFixed(3), build: +bld.toFixed(3) };
+  }
+
+  function count(polys) {
+    var n = 0;
+    for (var i = 0; i < polys.length; i++) n += polys[i].length;
+    return n;
+  }
+
+  /* 三档阈值：重叠区由小到大 */
+  var rows = [];
+  [ -50, -67, -80 ].forEach(function (thr) {
+    S.project.settings.overlapThr = thr;
+    WS._ui.rebuildOverlap();
+    var ps = S.overlapPolys || [];
+    var t = timeIt(ps, 20);
+    rows.push({ thr: thr, polys: ps.length, pts: count(ps), drawMs: t.draw, buildMs: t.build });
+  });
+  S.project.settings.overlapThr = -67;
+  WS._ui.rebuildOverlap();
+
+  /* 合成压力：20 个环 × 250 点 = 5000 点（远超真实项目） */
+  var synth = [];
+  for (var c = 0; c < 20; c++) {
+    var ring = [], cx = 120 + c * 55, cy = 120 + c * 40, r = 70;
+    for (var v = 0; v < 250; v++) {
+      var th = v / 250 * Math.PI * 2;
+      ring.push({ x: cx + Math.cos(th) * r, y: cy + Math.sin(th) * r });
+    }
+    synth.push(ring);
+  }
+  var ts = timeIt(synth, 20);
+
+  function run(n, cb) {
+    var ts2 = [], i = 0, prev = 0;
+    function tick() {
+      WS.requestDraw();
+      var now = performance.now();
+      if (prev) ts2.push(now - prev);
+      prev = now;
+      if (++i < n) requestAnimationFrame(tick); else cb(ts2);
+    }
+    requestAnimationFrame(tick);
+  }
+  function st(arr) {
+    var b = arr.slice(5).sort(function (x, y) { return x - y; });
+    var sum = 0;
+    for (var i2 = 0; i2 < b.length; i2++) sum += b[i2];
+    return { med: +b[b.length >> 1].toFixed(2), p90: +b[Math.floor(b.length * 0.9)].toFixed(2), avg: +(sum / b.length).toFixed(2) };
+  }
+
+  return new Promise(function (res) {
+    run(50, function (on) {
+      S.layers.overlap = false;
+      S.overlapPolys = null;
+      run(50, function (off) {
+        res(JSON.stringify({
+          real: rows,
+          synth: { pts: count(synth), drawMs: ts.draw, buildMs: ts.build },
+          frameOn: st(on), frameOff: st(off)
+        }));
+      });
+    });
+  });
+})()

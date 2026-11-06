@@ -1,0 +1,84 @@
+(function () {
+  var S = WS.state;
+  WS._ui.setMode('device');
+
+  /* 模拟用户场景：热力图 / 方向图 / 重叠全部关闭 */
+  S.layers.heat = false; S.showHeat = false;
+  S.layers.beam = false;
+  S.layers.overlap = false;
+  WS._ui.syncLayerUI();
+  WS.requestDraw();
+
+  var acc = { compute: 0, canvas: 0, stats: 0, inspect: 0, n: 0 };
+  var origC = WS.computeHeat;
+  WS.computeHeat = function () {
+    var t = performance.now();
+    var r = origC.apply(null, arguments);
+    acc.compute += performance.now() - t; acc.n++;
+    return r;
+  };
+  var origH = WS.heatToCanvas;
+  WS.heatToCanvas = function () {
+    var t = performance.now();
+    var r = origH.apply(null, arguments);
+    acc.canvas += performance.now() - t;
+    return r;
+  };
+
+  var cv = document.getElementById('cv');
+  var rect = cv.getBoundingClientRect();
+  WS._ui.setTool('ap-ceiling');
+
+  function placeOnce(px, py) {
+    var t0 = performance.now();
+    cv.dispatchEvent(new MouseEvent('mousedown', {
+      clientX: rect.left + px, clientY: rect.top + py,
+      button: 0, buttons: 1, bubbles: true
+    }));
+    window.dispatchEvent(new MouseEvent('mouseup', { button: 0, bubbles: true }));
+    return performance.now() - t0;
+  }
+
+  var times = [];
+  var before = { compute: 0, canvas: 0, n: 0 };
+  for (var i = 0; i < 3; i++) {
+    before.compute = acc.compute; before.canvas = acc.canvas; before.n = acc.n;
+    var dt = placeOnce(420 + i * 60, 380 + i * 40);
+    times.push({
+      total: +dt.toFixed(1),
+      compute: +(acc.compute - before.compute).toFixed(1),
+      canvas: +(acc.canvas - before.canvas).toFixed(1),
+      runs: acc.n - before.n,
+      netTotal: +(dt - (acc.compute - before.compute) - (acc.canvas - before.canvas)).toFixed(1)
+    });
+  }
+
+  /* autosave 的真实成本：序列化整个项目（含 0.95 MB 图片）+ 写入 localStorage */
+  var t1 = performance.now();
+  var str = JSON.stringify(S.project);
+  var tJson = performance.now() - t1;
+
+  var t2 = performance.now();
+  var quota = 'ok';
+  try { localStorage.setItem('__probe_save', str); } catch (e) { quota = e.name; }
+  var tSet = performance.now() - t2;
+  try { localStorage.removeItem('__probe_save'); } catch (e2) {}
+
+  var t3 = performance.now();
+  WS._ui.renderInspector();
+  var tInsp = performance.now() - t3;
+
+  var t4 = performance.now();
+  WS.requestDraw();
+  var tDraw = performance.now() - t4;
+
+  return JSON.stringify({
+    aps: S.project.aps.length,
+    obstacles: S.project.obstacles.length,
+    layers: { heat: S.layers.heat, beam: S.layers.beam, overlap: S.layers.overlap },
+    place: times,
+    autosave: { jsonMs: +tJson.toFixed(1), setItemMs: +tSet.toFixed(1), quota: quota, sizeMB: +(str.length / 1048576).toFixed(2) },
+    renderInspectorMs: +tInsp.toFixed(1),
+    requestDrawMs: +tDraw.toFixed(1)
+  });
+})()
