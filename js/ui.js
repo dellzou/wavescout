@@ -23,6 +23,9 @@
   var downButton = 0;         /* 本次按下的鼠标键，避免松右键/中键误结束操作 */
   var MIN_WALL_PX = 4;        /* 墙段最短长度（屏幕像素）：低于此值视为「被拖没了」 */
   var autoSaveWarned = false;
+  /* 底图按楼层分键存：localStorage 一格里放不下多楼层的大图 */
+  var IMG_KEY = 'ws_autosave_img_';
+  var IMG_KEY_LEGACY = 'ws_autosave_img';   /* 1.8.2 及更早只有这一张（当前层） */
 
   /* ============================================================
      选择集：单选 / 多选（框选）共用一套状态
@@ -1683,7 +1686,7 @@
   /* 打开一份文档：把「活动楼层」挂到 S.project 上，其余代码继续围绕 S.project 工作 */
   function applyDoc(doc) {
     S.doc = doc;
-    var f = WS.activeFloor(doc);
+    var f = WS.ensureActive(doc);        /* 载入是结构变化点，显式校准活动指针 */
     S.project = f;
 
     clearSelection();
@@ -1775,7 +1778,7 @@
 
   /* 结构变化后强制重载当前楼层（不走 switchFloor 的「同层直接返回」） */
   function reloadFloor() {
-    var f = WS.activeFloor(S.doc);
+    var f = WS.ensureActive(S.doc);     /* 删除楼层后指针可能失效，这里是结构变化点 */
     S.project = f;
     S.heat = null;
     S.heatCanvas = null;
@@ -2006,7 +2009,7 @@
         '<span style="font-size:11px;color:var(--txt-3)">另选路径存一份副本（Ctrl+Shift+S）；日常保存按 Ctrl+S 直接覆盖上次的文件</span></button>' +
         '<button class="btn-s" id="expCsv" style="text-align:left;padding:11px 14px">' +
         '<b style="color:var(--txt);display:block;margin-bottom:3px">导出设备清单 (.csv)</b>' +
-        '<span style="font-size:11px;color:var(--txt-3)">AP 名称、安装方式、功率、位置坐标</span></button>' +
+        '<span style="font-size:11px;color:var(--txt-3)">全部楼层的 AP 清单，含楼栋/楼层列与坐标</span></button>' +
         '</div>',
       buttons: [{ label: '关闭', cls: 'btn-s' }]
     });
@@ -2162,36 +2165,65 @@
     g.fillText(meters + ' m', x0, y0 - 9 / scale);
   }
 
-  function exportCsv() {
-    var p = S.project;
-    var mpp = p.mpp || 0.05;
-    /* 单元格转义：AP 名称里带逗号 / 引号 / 换行时，Excel 会错列 */
-    function cell(v) {
+  /* 导出设备清单：按「楼栋 / 楼层」分组导出全部楼层的 AP。
+     只导当前层的话，多楼层项目的清单会缺层，而坐标又是层内的，
+     拿出去无法判断某台 AP 属于哪一层。
+     文本生成与下载分开：csvText() 是纯函数，自动化测试可以直接断言内容。 */
+  function csvText(doc) {
+    /* 单元格转义 + CSV 注入防护合成一次处理。
+       原实现先 txt() 再 map(cell)，txt 已经加过引号、cell 又加一层，
+       AP 名里带逗号时会变成 """AP,1"""（Excel 里连引号一起显示）。
+       Excel 还会把 = + - @ 开头的值当公式执行（CSV 注入 / CWE-1236），
+       文本列前面垫一个单引号强制按文本处理；数值列不走这条，避免负数被改坏。 */
+    function field(v, isText) {
       var t = (v == null) ? '' : String(v);
+      if (isText && /^[=+\-@\t\r]/.test(t)) t = "'" + t;
       return /[",\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
     }
-    /* 文本单元格：Excel 会把 = + - @ 开头的值当公式执行（CSV 注入 / CWE-1236），
-       前面垫一个单引号强制按文本处理；数值列不走这里，避免负数被改坏 */
-    function txt(v) {
-      var t = (v == null) ? '' : String(v);
-      if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
-      return cell(t);
-    }
-    var lines = ['名称,安装方式,发射功率(dBm),天线增益(dBi),朝向(°),安装高度(m),X(m),Y(m),半径参考(m)'];
-    p.aps.forEach(function (a) {
-      var cfg = WS.AP_PRESETS[a.mount] || WS.AP_PRESETS.ceiling;
-      lines.push([
-        txt(a.name), txt(cfg.label), a.power, a.gain,
-        a.mount === 'ceiling' ? '-' : a.azimuth,
-        WS.apHeight(a, p.settings),
-        WS.round(a.x * mpp, 2), WS.round(a.y * mpp, 2),
-        a.mount === 'ceiling' ? WS.round(WS.apHeight(a, p.settings) - p.settings.rxHeight, 2) : '-'
-      ].map(cell).join(','));
+
+    var lines = ['楼栋,楼层,名称,安装方式,发射功率(dBm),天线增益(dBi),朝向(°),安装高度(m),X(m),Y(m),半径参考(m)'];
+    var count = 0;
+
+    (doc.buildings || []).forEach(function (b) {
+      (b.floors || []).forEach(function (p) {
+        var mpp = p.mpp || 0.05;
+        (p.aps || []).forEach(function (a) {
+          var cfg = WS.AP_PRESETS[a.mount] || WS.AP_PRESETS.ceiling;
+          var hgt = WS.apHeight(a, p.settings);
+          lines.push([
+            field(b.name, true),
+            field(p.name, true),
+            field(a.name, true),
+            field(cfg.label, true),
+            field(a.power),
+            field(a.gain),
+            field(a.mount === 'ceiling' ? '-' : a.azimuth),
+            field(hgt),
+            field(WS.round(a.x * mpp, 2)),
+            field(WS.round(a.y * mpp, 2)),
+            field(a.mount === 'ceiling' ? WS.round(hgt - p.settings.rxHeight, 2) : '-')
+          ].join(','));
+          count++;
+        });
+      });
     });
-    var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    var name = (p.name || '勘波').replace(/[\\/:*?"<>|]/g, '_');
+
+    if (!count) return null;
+
+    return { text: '\ufeff' + lines.join('\r\n'), count: count };
+  }
+
+  function exportCsv() {
+    var doc = S.doc || WS.wrapDoc(S.project);
+    var out = csvText(doc);
+    if (!out) {
+      tip('当前项目还没有 AP，先把 AP 放到图纸上再导出');
+      return;
+    }
+    var blob = new Blob([out.text], { type: 'text/csv;charset=utf-8' });
+    var name = (doc.name || '勘波').replace(/[\\/:*?"<>|]/g, '_');
     downloadBlob(blob, name + '-设备清单.csv');
-    notifySaved('设备清单已导出');
+    notifySaved('设备清单已导出（' + out.count + ' 台 AP）');
   }
 
   /* ============================================================
@@ -3360,32 +3392,83 @@
   }
 
   function autosave() {
-    var p = S.project;
+    var doc = S.doc || WS.wrapDoc(S.project);
     try {
       /* 结构与底图分开存：结构只有几十 KB，几乎一定能存下；
          底图是 base64，大图可能超出 localStorage 配额，单独兜底 */
-      var structure = WS.serializeSlim(S.doc || WS.wrapDoc(p));
+      var structure = WS.serializeSlim(doc);
       localStorage.setItem('ws_autosave_v1', structure);
       localStorage.setItem('ws_autosave_theme', S.theme);
-
-      if (p.image) {
-        try {
-          localStorage.setItem('ws_autosave_img', p.image);
-        } catch (e2) {
-          if (!autoSaveWarned) {
-            autoSaveWarned = true;
-            tip('图纸过大，自动备份未包含底图；请用「保存」导出项目文件', 5200);
-          }
-        }
-      } else {
-        localStorage.removeItem('ws_autosave_img');
-      }
     } catch (e) {
       if (!autoSaveWarned) {
         autoSaveWarned = true;
         tip('自动备份失败，请及时用「保存」导出项目文件', 5200);
       }
+      return;                    /* 结构都没存下，底图不必再试 */
     }
+    saveBackdrops(doc);
+  }
+
+  /* 逐层保存底图：每层一个键，某层失败不影响其它层。
+     配额（约 5 MB）不够时如实报告有几层没备份到，
+     不能像旧版那样只存当前层、却让人以为整份项目都备份了。 */
+  function saveBackdrops(doc) {
+    var floors = [];
+    (doc.buildings || []).forEach(function (b) {
+      (b.floors || []).forEach(function (f) { floors.push(f); });
+    });
+
+    /* ① 先清掉已删除楼层的陈旧底图，给后面的写入腾出配额 */
+    var live = {};
+    floors.forEach(function (f) { live[IMG_KEY + f.id] = true; });
+    try {
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(IMG_KEY) === 0 && !live[k]) localStorage.removeItem(k);
+      }
+    } catch (e) { /* 清理失败不影响主流程 */ }
+
+    /* ② 逐层写入；超配额的那层跳过并计数 */
+    var written = {};
+    var missing = 0;
+    floors.forEach(function (f) {
+      var key = IMG_KEY + f.id;
+      if (!f.image) {
+        try { localStorage.removeItem(key); } catch (e) {}
+        return;
+      }
+      try {
+        localStorage.setItem(key, f.image);
+        written[f.id] = true;
+      } catch (e) {
+        missing++;
+        /* 别让上一次的旧图冒充本次的底图 */
+        try { localStorage.removeItem(key); } catch (e2) {}
+      }
+    });
+
+    /* ③ 当前层的新键写成功了，就可以丢掉旧版的单张键（省下一张图的空间）；
+       没写成功则保留它，恢复时还能兜底当前层 */
+    if (written[doc.activeFloor]) {
+      try { localStorage.removeItem(IMG_KEY_LEGACY); } catch (e) {}
+    }
+
+    if (missing && !autoSaveWarned) {
+      autoSaveWarned = true;
+      tip('有 ' + missing + ' 层的底图超出浏览器存储配额，未纳入自动备份；' +
+          '请用「保存」导出项目文件', 5600);
+    }
+  }
+
+  /* 文档里是否还有值得一提的内容（任意一层有底图 / 墙体 / AP） */
+  function docHasContent(doc) {
+    var has = false;
+    (doc.buildings || []).forEach(function (b) {
+      (b.floors || []).forEach(function (f) {
+        if (f.image || (f.aps && f.aps.length) || (f.obstacles && f.obstacles.length)) has = true;
+      });
+    });
+    return has;
   }
 
   function restoreAutosave() {
@@ -3399,15 +3482,29 @@
       if (!raw) return;
 
       var doc = WS.deserialize(raw);
-      var f = WS.activeFloor(doc);
+      var f = WS.ensureActive(doc);
       if (!f) return;
-      if (!f.image && !f.aps.length && !f.obstacles.length) return;
 
-      /* 底图单独取回（只还到当前楼层） */
-      if (!f.image) {
-        var imgData = localStorage.getItem('ws_autosave_img');
-        if (imgData) f.image = imgData;
-      }
+      /* 底图逐层取回；旧版本只有一张 ws_autosave_img（当前层），作为兜底 */
+      var legacyLoaded = false, legacyImg = null;
+      (doc.buildings || []).forEach(function (b) {
+        (b.floors || []).forEach(function (fl) {
+          if (fl.image) return;
+          var img = null;
+          try { img = localStorage.getItem(IMG_KEY + fl.id); } catch (e) {}
+          if (!img && fl.id === doc.activeFloor) {
+            if (!legacyLoaded) {
+              legacyLoaded = true;
+              try { legacyImg = localStorage.getItem(IMG_KEY_LEGACY); } catch (e) {}
+            }
+            img = legacyImg;
+          }
+          if (img) fl.image = img;
+        });
+      });
+
+      /* 整份文档都空着就别覆盖空白项目（旧实现只看当前层，多楼层时会误判） */
+      if (!docHasContent(doc)) return;
 
       applyDoc(doc);
       if (S.mode === 'device') el.legend.hidden = false;
@@ -3785,7 +3882,12 @@
     toggleLayer: toggleLayer,
     syncLayerUI: syncLayerUI,
     startAutoPan: startAutoPan,
-    stopAutoPan: stopAutoPan
+    stopAutoPan: stopAutoPan,
+    /* 导出与自动备份（自动化测试用：csvText 是纯函数，可直接断言内容） */
+    csvText: csvText,
+    autosave: autosave,
+    restoreAutosave: restoreAutosave,
+    docHasContent: docHasContent
   };
 
   if (document.readyState === 'loading') {

@@ -176,27 +176,19 @@ window.WS = window.WS || {};
   /* 热力图绘制下限：色带最弱一档。低于此值才算真正的「无信号」 */
   WS.HEAT_FLOOR = WS.BANDS[WS.BANDS.length - 1].min;
 
-  /* 平面编辑手感参数 —— 两个「默认值」同时也是滑条的中间值 */
-  WS.VERSION = '1.8.2';
+  /* 软件版本（界面「关于」、导出文件与文档共用，改版本只改这一处） */
+  WS.VERSION = '1.8.3';
 
   /* 底图压缩策略：dataURL 超过这个体积才尝试重编码；收益不到 15% 就保留原图。
      只对线稿/扫描件做一次（WebP 有损 q0.95），尺寸不变，坐标与标定不受影响。 */
   WS.BACKDROP_TRY_BYTES = 500 * 1024;
-  WS.BACKDROP_MIN_GAIN = 0.85;      // 软件版本（界面「关于」与文档共用）
+  WS.BACKDROP_MIN_GAIN = 0.85;
+
+  /* 平面编辑手感参数 —— 两个「默认值」同时也是滑条的中间值 */
   WS.SNAP_PX = 8;         // 端点吸附半径默认值（屏幕像素），滑条范围 0 ~ SNAP_MAX_PX
   WS.SNAP_MAX_PX = 16;    // 吸附半径上限（默认值的 2 倍）
   WS.ORTHO_RATIO = 0.16;  // 直线修正阈值默认值：短边/长边 < 0.16（约 9.1°）即拉直
   WS.ORTHO_MAX = 0.32;    // 修正阈值上限（默认值的 2 倍，约 17.7°）
-
-  WS.FREQS = [
-    { mhz: 2412, label: '2.4 GHz · Ch.1' },
-    { mhz: 2437, label: '2.4 GHz · Ch.6' },
-    { mhz: 2462, label: '2.4 GHz · Ch.11' },
-    { mhz: 5180, label: '5 GHz · Ch.36 (低)' },
-    { mhz: 5200, label: '5 GHz · Ch.40' },
-    { mhz: 5500, label: '5 GHz · Ch.100 (中)' },
-    { mhz: 5745, label: '5 GHz · Ch.149 (高)' }
-  ];
 
   /* ------------------------------------------------------------
      频段 / 信道 / 频宽
@@ -440,16 +432,32 @@ window.WS = window.WS || {};
     return null;
   };
 
-  /* 当前楼层：指针失效时回退到第一栋第一层并自我修复 */
-  WS.activeFloor = function (doc) {
+  /* 活动楼层的内部定位：只算不改，供 activeFloor / ensureActive 共用 */
+  function activeHit(doc) {
     if (!doc || !Array.isArray(doc.buildings) || !doc.buildings.length) return null;
     var hit = WS.findFloor(doc, doc.activeFloor);
-    if (hit) return hit.floor;
+    if (hit) return hit;
     var b = WS.findBuilding(doc, doc.activeBuilding) || doc.buildings[0];
-    var f = b.floors[0];
-    doc.activeBuilding = b.id;
-    doc.activeFloor = f.id;
-    return f;
+    if (!b || !b.floors || !b.floors.length) return null;
+    return { building: b, floor: b.floors[0] };
+  }
+
+  /* 当前楼层：只读查询。指针失效时返回「第一栋第一层」，但不改 doc ——
+     名字叫 activeFloor 却暗改 doc.activeBuilding / activeFloor，会在渲染、
+     统计这类只读路径里埋下难以追查的写入；需要修复请显式调 ensureActive()。 */
+  WS.activeFloor = function (doc) {
+    var hit = activeHit(doc);
+    return hit ? hit.floor : null;
+  };
+
+  /* 显式修复活动指针：把 doc.activeBuilding / activeFloor 校准到真实存在的楼层。
+     只在「载入 / 删除 / 迁移」这类文档结构发生变化的入口调用。 */
+  WS.ensureActive = function (doc) {
+    var hit = activeHit(doc);
+    if (!hit) return null;
+    doc.activeBuilding = hit.building.id;
+    doc.activeFloor = hit.floor.id;
+    return hit.floor;
   };
 
   WS.setActive = function (doc, bid, fid) {
@@ -502,6 +510,7 @@ window.WS = window.WS || {};
       doc.activeBuilding = b.id;
       doc.activeFloor = next.id;
     }
+    WS.ensureActive(doc);
     return true;
   };
 
@@ -516,6 +525,7 @@ window.WS = window.WS || {};
       doc.activeBuilding = nb.id;
       doc.activeFloor = nb.floors[0].id;
     }
+    WS.ensureActive(doc);
     return true;
   };
 
@@ -729,111 +739,147 @@ window.WS = window.WS || {};
     high: 300000
   };
 
-  WS.computeHeat = function (proj, quality) {
-    var st = proj.settings;
-    var W = proj.imgW || 1000, H = proj.imgH || 800;
-    var mpp = proj.mpp || 0.05;
-    var fMHz = st.freq;
-    var rxH = st.rxHeight;
+  /* ---- 逐点场强计算的公共内核 ----
+     computeHeat 与 computeOverlap 原来各自内联一份完全相同的
+     「方向图 + 穿墙损耗 + FSPL」，两处各约 60 行；改一处忘一处就会出现
+     「热力图正常、重叠区却是旧口径」的隐性不一致，这里统一收拢。 */
 
-    var target = (typeof quality === 'number')
-      ? quality
-      : (WS.QUALITY[quality] || WS.QUALITY.normal);
-    /* 源网格越细，后续插值放大倍数越小，边缘越锐利 */
-    var cell = Math.max(1.6, Math.sqrt(W * H / target));
-    var gw = Math.max(1, Math.ceil(W / cell));
-    var gh = Math.max(1, Math.ceil(H / cell));
-    var data = new Float32Array(gw * gh);
-
-    /* --- 预取障碍物为扁平数组 --- */
-    var obs = proj.obstacles;
-    var nSeg = obs.length;
-    var sx1 = new Float32Array(nSeg), sy1 = new Float32Array(nSeg);
-    var sx2 = new Float32Array(nSeg), sy2 = new Float32Array(nSeg);
-    /* 预取两套穿墙衰减：AP 可能单独工作在 2.4G 或 5G，
-       若这里仍按项目频段取，会出现「FSPL 按 AP 频点、穿墙按项目频段」的互相矛盾 */
-    var sAtt24 = new Float32Array(nSeg);
-    var sAtt5 = new Float32Array(nSeg);
-    for (var i = 0; i < nSeg; i++) {
+  /* 障碍物扁平化：Float32Array 比对象数组快一个量级，且避免内层访问原型链 */
+  function prepSegments(proj) {
+    var obs = proj.obstacles || [];
+    var n = obs.length;
+    var seg = {
+      n: n,
+      x1: new Float32Array(n), y1: new Float32Array(n),
+      x2: new Float32Array(n), y2: new Float32Array(n),
+      att24: new Float32Array(n), att5: new Float32Array(n)
+    };
+    for (var i = 0; i < n; i++) {
       var o = obs[i];
-      sx1[i] = o.x1; sy1[i] = o.y1; sx2[i] = o.x2; sy2[i] = o.y2;
-      sAtt24[i] = WS.obAtten(o, 2437);
-      sAtt5[i] = WS.obAtten(o, 5180);
+      seg.x1[i] = o.x1; seg.y1[i] = o.y1;
+      seg.x2[i] = o.x2; seg.y2[i] = o.y2;
+      /* 两套穿墙衰减：AP 可能单独工作在 2.4G 或 5G。若只按项目频段取，
+         会出现「FSPL 按 AP 频点、穿墙按项目频段」的互相矛盾 */
+      seg.att24[i] = WS.obAtten(o, 2437);
+      seg.att5[i] = WS.obAtten(o, 5180);
     }
+    return seg;
+  }
 
-    /* --- 预取 AP 派生参数 --- */
+  /* AP 派生参数预取（每帧每 AP 只算一次，内层不再碰天线模型） */
+  function prepAps(proj, st, seg) {
     var aps = [];
     for (var j = 0; j < proj.aps.length; j++) {
       var ap = proj.aps[j];
       if (ap.enabled === false) continue;
       var P = WS.antennaParams(ap);
-      var rfH = WS.apRf(ap, st);
+      var rf = WS.apRf(ap, st);
       aps.push({
         x: ap.x, y: ap.y,
-        fL: 20 * Math.log10(rfH.mhz),
-        nK: 10 * (st.pathLossN || WS.defaultN(rfH.mhz)),
-        sAtt: rfH.mhz > 4000 ? sAtt5 : sAtt24,
-        h: Math.max(0.25, WS.apHeight(ap, st) - rxH),
+        lo: rf.lo, hi: rf.hi,                 /* 占用频段区间，重叠判定用 */
+        fL: 20 * Math.log10(rf.mhz),
+        nK: 10 * (st.pathLossN || WS.defaultN(rf.mhz)),
+        sAtt: rf.mhz > 4000 ? seg.att5 : seg.att24,
+        h: Math.max(0.25, WS.apHeight(ap, st) - st.rxHeight),
         peakElev: P.peakElev,
-        hpbwH: P.hpbwH, hpbwV: P.hpbwV,
-        nH: P.nH, nV: P.nV,
-        fb: P.fb, omni: P.omni,
+        hpbwV: P.hpbwV, nV: P.nV,
+        nH: P.nH, omni: P.omni,
         gain: P.gain, power: P.power,
         az: (ap.azimuth || 0) * D2R,
         br: Math.pow(10, -(P.fb || 0) / 10)
       });
     }
+    return aps;
+  }
+
+  /* 逐点场强内核：热力图与重叠区共用同一套「方向图 + 穿墙 + FSPL」。
+     两者原来各自内联一份约 60 行的相同计算，改一处忘一处就会出现
+     「热力图正常、重叠区还是旧口径」这种极难发现的隐性不一致。
+     注意这里保留内联、只统一循环骨架，没有再抽成 pointRssi() 之类的函数：
+     每像素每 AP 一次函数调用会打断 V8 内联，150k 网格实测慢约 2%
+     （对照数据见 build/verify-heat-eq.js）。
+       kind === 'heat'    每点取所有 AP 的最大 RSSI → Float32Array
+       kind === 'overlap' 每点收集达阈值的 AP，再两两比对频率区间 → Uint8 掩码 */
+  function computeField(proj, kind, quality, thr) {
+    var st = proj.settings;
+    var W = proj.imgW || 1000, H = proj.imgH || 800;
+    var mpp = proj.mpp || 0.05;
+    var isHeat = (kind === 'heat');
+
+    /* 源网格越细，后续插值放大倍数越小，边缘越锐利。
+       重叠是「区域」概念，不需要热力图那种精细度，默认用 draft 档 */
+    var target = (typeof quality === 'number')
+      ? quality
+      : (WS.QUALITY[quality] || (isHeat ? WS.QUALITY.normal : WS.QUALITY.draft));
+    var cell = Math.max(1.6, Math.sqrt(W * H / target));
+    var gw = Math.max(1, Math.ceil(W / cell));
+    var gh = Math.max(1, Math.ceil(H / cell));
+
+    var limit = (thr == null) ? (st.overlapThr != null ? st.overlapThr : -67) : thr;
+    var data = isHeat ? new Float32Array(gw * gh) : new Uint8Array(gw * gh);
+
+    var seg = prepSegments(proj);
+    var aps = prepAps(proj, st, seg);
     var nAp = aps.length;
 
-    if (nAp === 0) {
-      return { gw: gw, gh: gh, cell: cell, data: data, empty: true };
+    /* 早退：热力图没有 AP、重叠区不足两台，都没有算的意义 */
+    if (isHeat ? nAp === 0 : nAp < 2) {
+      return isHeat
+        ? { gw: gw, gh: gh, cell: cell, data: data, empty: true }
+        : { gw: gw, gh: gh, cell: cell, data: data, empty: true, count: 0, thr: limit };
     }
 
     /* 超过这个距离，即使全程无墙也低于色带下限，直接剪枝省掉墙体求交 */
     var maxR2 = Math.pow(90 / mpp, 2);
-
+    var sx1 = seg.x1, sy1 = seg.y1, sx2 = seg.x2, sy2 = seg.y2, nSeg = seg.n;
+    var hitIdx = isHeat ? null : new Int32Array(nAp);
+    var cellCount = 0;
     var idx = 0;
+
     for (var gy = 0; gy < gh; gy++) {
       var py = (gy + 0.5) * cell;
       for (var gx = 0; gx < gw; gx++, idx++) {
         var px = (gx + 0.5) * cell;
         var best = -200;
+        var nHit = 0;
 
         for (var k = 0; k < nAp; k++) {
           var A = aps[k];
           var dx = px - A.x, dy = py - A.y;
           var r2px = dx * dx + dy * dy;
           if (r2px > maxR2) continue;
+
           var rM = Math.sqrt(r2px) * mpp;
           var d3 = Math.sqrt(rM * rM + A.h * A.h);
 
-          /* 垂直面 */
+          /* 垂直面方向图 */
           var vPat = 1;
           if (A.hpbwV < 359.5) {
             var cV = Math.cos(Math.atan2(rM, A.h) - A.peakElev);
             vPat = cV <= 0 ? 0.0001 : Math.pow(cV, A.nV);
           }
 
-          /* 水平面 */
+          /* 水平面方向图：主瓣 cos^nH，旁瓣按前后比衰减，背向留 0.0025 底噪 */
           var hPat = 1;
           if (!A.omni) {
             var dAz = Math.atan2(dx, -dy) - A.az;
             dAz = Math.atan2(Math.sin(dAz), Math.cos(dAz));
             var cH = Math.cos(dAz);
             if (cH >= 0) {
-              var v = Math.pow(cH, A.nH);
+              var lobe = Math.pow(cH, A.nH);
               var fl = A.br * 0.55;
-              hPat = v > fl ? v : fl;
+              hPat = lobe > fl ? lobe : fl;
             } else {
               var bk = A.br * cH * cH;
               hPat = bk > 0.0025 ? bk : 0.0025;
             }
           }
 
-          /* 穿墙损耗 */
+          /* 穿墙损耗：包围盒粗筛，再用两次叉积判断线段是否相交 */
           var wall = 0;
           var loX = A.x < px ? A.x : px, hiX = A.x < px ? px : A.x;
           var loY = A.y < py ? A.y : py, hiY = A.y < py ? py : A.y;
+          var sAtt = A.sAtt;
           for (var s = 0; s < nSeg; s++) {
             var q1x = sx1[s], q1y = sy1[s], q2x = sx2[s], q2y = sy2[s];
             if ((q1x > q2x ? q1x : q2x) < loX || (q1x < q2x ? q1x : q2x) > hiX) continue;
@@ -844,7 +890,7 @@ window.WS = window.WS || {};
             var e3 = (q2x - q1x) * (A.y - q1y) - (q2y - q1y) * (A.x - q1x);
             var e4 = (q2x - q1x) * (py - q1y) - (q2y - q1y) * (px - q1x);
             if ((e3 > 0 && e4 > 0) || (e3 < 0 && e4 < 0)) continue;
-            wall += A.sAtt[s];
+            wall += sAtt[s];
             if (wall > 80) { wall = 80; break; }
           }
 
@@ -852,146 +898,13 @@ window.WS = window.WS || {};
           var dSafe = d3 < 1 ? 1 : d3;
           var fspl = A.nK * Math.log10(dSafe) + A.fL - 27.55;
           var rssi = A.power + A.gain + grel - fspl - wall;
+
           if (rssi > best) best = rssi;
-        }
-        data[idx] = best;
-      }
-    }
-
-    return { gw: gw, gh: gh, cell: cell, data: data, empty: false };
-  };
-
-  /* ------------------------------------------------------------
-     5b. 同频重叠区计算
-     判定（逐点）：
-       ① 该点被至少两台 AP 覆盖，且这几台的 RSSI 都 ≥ 干扰阈值；
-       ② 其中存在一对 AP，占用频率区间有交叠（不同信道 / 不相交的频宽不算）。
-     满足①②的点即属于「同频重叠区」。只输出 0/1 掩码，交给 contour() 提矢量轮廓。
-     ------------------------------------------------------------ */
-  WS.computeOverlap = function (proj, thr, quality) {
-    var st = proj.settings;
-    var W = proj.imgW || 1000, H = proj.imgH || 800;
-    var mpp = proj.mpp || 0.05;
-    var rxH = st.rxHeight;
-    var limit = (thr == null) ? (st.overlapThr != null ? st.overlapThr : -67) : thr;
-
-    /* 重叠是「区域」概念，不需要热力图那种精细度，默认用 draft 档 */
-    var target = (typeof quality === 'number')
-      ? quality
-      : (WS.QUALITY[quality] || WS.QUALITY.draft);
-    var cell = Math.max(1.6, Math.sqrt(W * H / target));
-    var gw = Math.max(1, Math.ceil(W / cell));
-    var gh = Math.max(1, Math.ceil(H / cell));
-    var data = new Uint8Array(gw * gh);
-
-    /* --- 障碍物扁平化 --- */
-    var obs = proj.obstacles;
-    var nSeg = obs.length;
-    var sx1 = new Float32Array(nSeg), sy1 = new Float32Array(nSeg);
-    var sx2 = new Float32Array(nSeg), sy2 = new Float32Array(nSeg);
-    var sAtt24 = new Float32Array(nSeg);
-    var sAtt5 = new Float32Array(nSeg);
-    for (var i = 0; i < nSeg; i++) {
-      var o = obs[i];
-      sx1[i] = o.x1; sy1[i] = o.y1; sx2[i] = o.x2; sy2[i] = o.y2;
-      sAtt24[i] = WS.obAtten(o, 2437);
-      sAtt5[i] = WS.obAtten(o, 5180);
-    }
-
-    /* --- AP 预取（含各自的频率区间） --- */
-    var aps = [];
-    for (var j = 0; j < proj.aps.length; j++) {
-      var ap = proj.aps[j];
-      if (ap.enabled === false) continue;
-      var P = WS.antennaParams(ap);
-      var rf = WS.apRf(ap, st);
-      aps.push({
-        x: ap.x, y: ap.y,
-        lo: rf.lo, hi: rf.hi,
-        fL: 20 * Math.log10(rf.mhz),
-        nK: 10 * (st.pathLossN || WS.defaultN(rf.mhz)),
-        sAtt: rf.mhz > 4000 ? sAtt5 : sAtt24,
-        h: Math.max(0.25, WS.apHeight(ap, st) - rxH),
-        peakElev: P.peakElev,
-        hpbwH: P.hpbwH, hpbwV: P.hpbwV,
-        nH: P.nH, nV: P.nV,
-        fb: P.fb, omni: P.omni,
-        gain: P.gain, power: P.power,
-        az: (ap.azimuth || 0) * D2R,
-        br: Math.pow(10, -(P.fb || 0) / 10)
-      });
-    }
-    var nAp = aps.length;
-    if (nAp < 2) {
-      return { gw: gw, gh: gh, cell: cell, data: data, empty: true, count: 0, thr: limit };
-    }
-
-    var maxR2 = Math.pow(90 / mpp, 2);
-    var hitIdx = new Int32Array(nAp);
-    var cellCount = 0;
-    var idx = 0;
-
-    for (var gy = 0; gy < gh; gy++) {
-      var py = (gy + 0.5) * cell;
-      for (var gx = 0; gx < gw; gx++, idx++) {
-        var px = (gx + 0.5) * cell;
-        var nHit = 0;
-
-        for (var k = 0; k < nAp; k++) {
-          var A = aps[k];
-          var dx = px - A.x, dy = py - A.y;
-          var r2px = dx * dx + dy * dy;
-          if (r2px > maxR2) continue;
-          var rM = Math.sqrt(r2px) * mpp;
-          var d3 = Math.sqrt(rM * rM + A.h * A.h);
-
-          var vPat = 1;
-          if (A.hpbwV < 359.5) {
-            var cV = Math.cos(Math.atan2(rM, A.h) - A.peakElev);
-            vPat = cV <= 0 ? 0.0001 : Math.pow(cV, A.nV);
-          }
-          var hPat = 1;
-          if (!A.omni) {
-            var dAz = Math.atan2(dx, -dy) - A.az;
-            dAz = Math.atan2(Math.sin(dAz), Math.cos(dAz));
-            var cH = Math.cos(dAz);
-            if (cH >= 0) {
-              var hv = Math.pow(cH, A.nH);
-              var fl = A.br * 0.55;
-              hPat = hv > fl ? hv : fl;
-            } else {
-              var bk = A.br * cH * cH;
-              hPat = bk > 0.0025 ? bk : 0.0025;
-            }
-          }
-
-          /* 穿墙损耗 */
-          var wall = 0;
-          var loX = A.x < px ? A.x : px, hiX = A.x < px ? px : A.x;
-          var loY = A.y < py ? A.y : py, hiY = A.y < py ? py : A.y;
-          for (var sIdx = 0; sIdx < nSeg; sIdx++) {
-            var q1x = sx1[sIdx], q1y = sy1[sIdx], q2x = sx2[sIdx], q2y = sy2[sIdx];
-            if ((q1x > q2x ? q1x : q2x) < loX || (q1x < q2x ? q1x : q2x) > hiX) continue;
-            if ((q1y > q2y ? q1y : q2y) < loY || (q1y < q2y ? q1y : q2y) > hiY) continue;
-            var w1 = (px - A.x) * (q1y - A.y) - (py - A.y) * (q1x - A.x);
-            var w2 = (px - A.x) * (q2y - A.y) - (py - A.y) * (q2x - A.x);
-            if ((w1 > 0 && w2 > 0) || (w1 < 0 && w2 < 0)) continue;
-            var w3 = (q2x - q1x) * (A.y - q1y) - (q2y - q1y) * (A.x - q1x);
-            var w4 = (q2x - q1x) * (py - q1y) - (q2y - q1y) * (px - q1x);
-            if ((w3 > 0 && w4 > 0) || (w3 < 0 && w4 < 0)) continue;
-            wall += A.sAtt[sIdx];
-            if (wall > 80) { wall = 80; break; }
-          }
-
-          var grel = 10 * Math.log10(vPat * hPat + 1e-10);
-          var dSafe = d3 < 1 ? 1 : d3;
-          var fspl = A.nK * Math.log10(dSafe) + A.fL - 27.55;
-          var rssi = A.power + A.gain + grel - fspl - wall;
-
           /* 只有达到干扰阈值的 AP 才参与重叠判定 */
-          if (rssi >= limit) hitIdx[nHit++] = k;
+          if (!isHeat && rssi >= limit) hitIdx[nHit++] = k;
         }
 
+        if (isHeat) { data[idx] = best; continue; }
         if (nHit < 2) continue;
 
         /* 两两配对：频率区间有交叠即视为同频干扰 */
@@ -1007,10 +920,24 @@ window.WS = window.WS || {};
       }
     }
 
-    return {
-      gw: gw, gh: gh, cell: cell, data: data,
-      empty: cellCount === 0, count: cellCount, thr: limit
-    };
+    return isHeat
+      ? { gw: gw, gh: gh, cell: cell, data: data, empty: false }
+      : { gw: gw, gh: gh, cell: cell, data: data, empty: cellCount === 0, count: cellCount, thr: limit };
+  }
+
+  WS.computeHeat = function (proj, quality) {
+    return computeField(proj, 'heat', quality, null);
+  };
+
+  /* ------------------------------------------------------------
+     5b. 同频重叠区计算
+     判定（逐点）：
+       ① 该点被至少两台 AP 覆盖，且这几台的 RSSI 都 ≥ 干扰阈值；
+       ② 其中存在一对 AP，占用频率区间有交叠（不同信道 / 不相交的频宽不算）。
+     满足①②的点即属于「同频重叠区」。只输出 0/1 掩码，交给 contour() 提矢量轮廓。
+     ------------------------------------------------------------ */
+  WS.computeOverlap = function (proj, thr, quality) {
+    return computeField(proj, 'overlap', quality, thr);
   };
 
   /* ------------------------------------------------------------
@@ -1484,15 +1411,11 @@ window.WS = window.WS || {};
         f.level = raw.level || (j + 1);
         nb.floors.push(f);
       }
-      if (!nb.floors.length) nb.floors.push(WS.newFloor('1F', 1));
+        if (!nb.floors.length) nb.floors.push(WS.newFloor('1F', 1));
       doc.buildings.push(nb);
     }
     if (!doc.buildings.length) doc.buildings.push(WS.newBuilding('A 栋'));
-    if (!WS.findFloor(doc, doc.activeFloor)) {
-      var b0 = doc.buildings[0];
-      doc.activeBuilding = b0.id;
-      doc.activeFloor = b0.floors[0].id;
-    }
+    WS.ensureActive(doc);
     return doc;
   };
 

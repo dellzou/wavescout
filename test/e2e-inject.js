@@ -1206,6 +1206,63 @@
       String(WS.activeFloor(md).obstacles.length));
     ok('F9d 活动指针指向唯一那一层',
       md.activeFloor === md.buildings[0].floors[0].id && md.activeBuilding === md.buildings[0].id);
+
+    /* ---- F10 设备清单：一次导出全部楼层，且带楼栋/楼层列 ---- */
+    var bFloor = nb.floors[0];
+    bFloor.aps.push({
+      id: 'ap_b1', name: '机房-AP', mount: 'ceiling',
+      x: 120, y: 140, power: 20, gain: 3, azimuth: 0
+    });
+    f1.aps[0].name = 'AP,1';              /* 名字带逗号：验证不再双重转义 */
+    var csv = WS._ui.csvText(S.doc);
+    var apTotal = 0;
+    S.doc.buildings.forEach(function (b) {
+      b.floors.forEach(function (f) { apTotal += f.aps.length; });
+    });
+    ok('F10 CSV 行数 = 全部楼层 AP 总数',
+      !!csv && csv.count === apTotal && apTotal === 2,
+      csv ? csv.count + ' 行 / 应有 ' + apTotal : 'null');
+    ok('F10b CSV 首列是楼栋、次列是楼层',
+      !!csv && csv.text.indexOf('\ufeff楼栋,楼层,名称') === 0,
+      csv ? csv.text.slice(0, 16) : 'null');
+    ok('F10c 跨楼栋的 AP 都在同一份清单里',
+      !!csv && csv.text.indexOf('B 栋') > 0 && csv.text.indexOf('机房-AP') > 0);
+    ok('F10d 带逗号的名称只加一层引号',
+      !!csv && csv.text.indexOf('"AP,1"') > 0 && csv.text.indexOf('"""') < 0);
+
+    /* ---- F11 自动备份：底图按楼层分键存，结构里不含 base64 ---- */
+    f1.image = 'data:image/png;base64,AAA';
+    bFloor.image = 'data:image/png;base64,BBB';
+    WS._ui.autosave();
+    var k1 = 'ws_autosave_img_' + f1.id;
+    var k2 = 'ws_autosave_img_' + bFloor.id;
+    ok('F11 两层底图各自入档',
+      localStorage.getItem(k1) === f1.image && localStorage.getItem(k2) === bFloor.image,
+      'k1=' + (localStorage.getItem(k1) ? 'ok' : 'null') +
+      ' k2=' + (localStorage.getItem(k2) ? 'ok' : 'null'));
+    ok('F11b 结构里不含底图 base64',
+      (localStorage.getItem('ws_autosave_v1') || '').indexOf('base64') < 0);
+
+    /* ---- F12 恢复：两层底图都能取回（旧版只有当前层一张）---- */
+    f1.image = null;
+    bFloor.image = null;
+    WS._ui.restoreAutosave();
+    var rdoc = S.doc;
+    var rf1 = null, rf2 = null;
+    rdoc.buildings.forEach(function (b) {
+      b.floors.forEach(function (f) {
+        if (f.id === f1.id) rf1 = f;
+        if (f.id === bFloor.id) rf2 = f;
+      });
+    });
+    ok('F12 恢复后两层底图都在',
+      !!rf1 && !!rf2 && rf1.image === 'data:image/png;base64,AAA' &&
+      rf2.image === 'data:image/png;base64,BBB',
+      (rf1 && rf1.image ? 'k1 ok' : 'k1 丢失') + ' / ' +
+      (rf2 && rf2.image ? 'k2 ok' : 'k2 丢失'));
+    ok('F12b 恢复后 AP 与墙体一并回来',
+      !!rf1 && rf1.aps.length === 1 && rf1.obstacles.length === 1,
+      rf1 ? rf1.aps.length + ' AP / ' + rf1.obstacles.length + ' 墙' : 'null');
   }
 
   function finish() {

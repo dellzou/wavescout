@@ -1,7 +1,7 @@
 # ============================================================
 # electron-builder 配置 —— 生成"单文件便携版" exe
 # 用法：npm run build:portable
-# 产物：dist-portable/勘波 WaveScout v1.8.1 便携版.exe
+# 产物：dist-portable/勘波 WaveScout v<版本号> 便携版.exe（版本取自 package.json）
 #
 # 与 build/pack.js（目录版）的区别：
 #   目录版 = exe + 一堆 dll + resources 文件夹，必须整目录拷贝
@@ -50,7 +50,7 @@ portable:
   #   · 用 ASCII 目录名，避免中文路径在个别机器上出问题
   #   · 带版本号：不同版本的便携版同时运行时会解压到各自目录，不会互相覆盖崩溃
   #   ⚠️ 升级版本号时，这一行要同步改（package.json 的 version 改了这里也要改）
-  unpackDirName: WaveScout-1.8.2
+  unpackDirName: WaveScout-1.8.3
   # 双击运行时显示的启动图（用应用图标即可，不额外做图）
   splashImage: null
 

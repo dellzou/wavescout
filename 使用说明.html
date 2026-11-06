@@ -35,7 +35,7 @@ blockquote p{margin:0;}
 </head>
 <body><div class="wrap">
 <h1>勘波 WaveScout · 使用说明</h1>
-<blockquote>WaveScout —— 平面图无线覆盖规划工具<br>版本 1.8.2 · 适用于 Windows 10 / Windows 11<br><br>作者：<b>邹宁</b>（2004-04-17，广东广州）<br>© 2026 邹宁 版权所有 All Rights Reserved.</blockquote>
+<blockquote>WaveScout —— 平面图无线覆盖规划工具<br>版本 1.8.3 · 适用于 Windows 10 / Windows 11<br><br>作者：<b>邹宁</b>（2004-04-17，广东广州）<br>© 2026 邹宁 版权所有 All Rights Reserved.</blockquote>
 <hr>
 <h2>一、怎么打开</h2>
 <p><b>桌面版（推荐）</b></p>
@@ -287,7 +287,7 @@ blockquote p{margin:0;}
 <p><b>最终覆盖效果必须现场实测验证</b>（建议用 Ekahau / NetSpot 或专业扫频工具做后验证）。</p>
 <hr>
 <h2>九、项目文件与导出</h2>
-<table><thead><tr><th>按钮</th><th>作用</th><th>产物</th></tr></thead><tbody><tr><td>保存</td><td>保存完整项目（含底图、比例尺、所有图层与参数）</td><td><code>项目名.wssurvey.json</code></td></tr><tr><td>打开</td><td>载入保存的项目文件</td><td>—</td></tr><tr><td>导出 ▸ 另存为项目文件</td><td>另选路径存一份副本</td><td><code>项目名.wssurvey.json</code></td></tr><tr><td>导出 ▸ 导出热力图 PNG</td><td>底图 + 热力图 + 墙 + AP + 图例 + 比例尺</td><td><code>项目名-热力图.png</code></td></tr><tr><td>导出 ▸ 导出设备清单</td><td>AP 名称、安装方式、功率、坐标</td><td><code>项目名-设备清单.csv</code></td></tr></tbody></table>
+<table><thead><tr><th>按钮</th><th>作用</th><th>产物</th></tr></thead><tbody><tr><td>保存</td><td>保存完整项目（含底图、比例尺、所有图层与参数）</td><td><code>项目名.wssurvey.json</code></td></tr><tr><td>打开</td><td>载入保存的项目文件</td><td>—</td></tr><tr><td>导出 ▸ 另存为项目文件</td><td>另选路径存一份副本</td><td><code>项目名.wssurvey.json</code></td></tr><tr><td>导出 ▸ 导出热力图 PNG</td><td>底图 + 热力图 + 墙 + AP + 图例 + 比例尺</td><td><code>项目名-热力图.png</code></td></tr><tr><td>导出 ▸ 导出设备清单</td><td>全部楼层的 AP，含楼栋 / 楼层列与坐标</td><td><code>项目名-设备清单.csv</code></td></tr></tbody></table>
 <p><b>保存会记住位置</b>：第一次保存弹一次框，选好路径之后，<code>Ctrl+S</code> 或顶栏「保存」就<b>直接覆盖那个文件</b>，</p>
 <p>不再弹框。想换路径或另存一份，用 <code>Ctrl+Shift+S</code>（或「导出 ▸ 另存为项目文件」）。</p>
 <ul>
@@ -295,6 +295,7 @@ blockquote p{margin:0;}
 <li>路径按项目名分别记忆，多个项目互不干扰；记录存在 <code>%APPDATA%\WaveScout\recent-save.json</code></li>
 <li>项目文件是纯 JSON，底图以 base64 内嵌，<b>单个文件即可完整传递</b></li>
 <li>编辑过程会<b>自动保存到本机</b>（每 1.5 秒），意外关闭后重新打开会自动恢复</li>
+<li>自动备份会<b>逐层保存底图</b>；本机存储空间约 5 MB，图多图大时可能放不下，放不下的楼层会明确提示，此时请改用「保存」导出项目文件</li>
 <li>自动保存只保留最近一份，正式成果请务必手动「保存」成文件</li>
 </ul>
 <hr>
