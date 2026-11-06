@@ -1,0 +1,30 @@
+name: 功能建议
+description: 提一个新功能或改进想法
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提之前可以先看一眼 [README 里的「它不做什么」](https://github.com/dellzou/wavescout#它不做什么)——
+        射线追踪、SINR、多径这些是有意不做的，不是遗漏。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你想解决什么问题
+      description: 先说场景，再说功能。比如「投标时要把三层楼拼成一张总图」
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: 你希望它怎么工作
+      description: 不一定要具体到按钮放哪，说清期望的结果即可
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: 现在你是怎么绕过去的
+      description: 这一步往往比功能本身更有价值

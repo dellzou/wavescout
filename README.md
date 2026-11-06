@@ -8,7 +8,7 @@
 ![许可](https://img.shields.io/badge/license-Source--available-orange)
 ![依赖](https://img.shields.io/badge/runtime%20deps-zero-brightgreen)
 
-**下载** · [**使用说明**](使用说明.md) · [**作者博客**](https://xiaozou123.cn) · [**关于这个软件的完整介绍**](https://xiaozou123.cn/wavescout-wifi-coverage-planner/)
+[**下载**](https://github.com/dellzou/wavescout/releases) · [**使用说明**](使用说明.md) · [**作者博客**](https://xiaozou123.cn) · [**关于这个软件的完整介绍**](https://xiaozou123.cn/wavescout-wifi-coverage-planner/)
 
 ![勘波 WaveScout 热力图界面](docs/screenshots/heatmap.png)
 
@@ -46,7 +46,7 @@
 
 ## 快速开始
 
-**下载**：到 [Releases](../../releases) 页面取最新一版的单文件 exe。
+**下载**：到 [Releases](https://github.com/dellzou/wavescout/releases) 页面取最新一版的单文件 exe。
 
 | 项 | 说明 |
 |---|---|

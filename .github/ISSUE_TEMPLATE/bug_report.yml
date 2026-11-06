@@ -1,0 +1,55 @@
+name: 问题反馈
+description: 报告一个 bug 或异常行为
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。填得越具体，修得越快——尤其是**复现步骤**和**截图**。
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+      description: 实际看到的现象，尽量描述具体数值或位置
+    validations:
+      required: true
+
+  - type: textarea
+    id: expect
+    attributes:
+      label: 你期望的结果
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 载入示例项目
+        2. 切到设备编辑模式
+        3. 拖动 AP-1 到墙边
+        4. 松手后热力图没有更新
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 软件版本
+      description: 界面左上角版本徽标，或底部状态栏右下角
+      placeholder: v1.8.1
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Windows 版本
+      placeholder: Windows 11 23H2
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 截图或项目文件
+      description: 截图最有用。附项目文件请先确认不含敏感信息（.wssurvey.json 是纯 JSON，可直接拖进来）
