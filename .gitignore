@@ -1,6 +1,5 @@
-# 依赖与产物
+# 依赖
 node_modules/
-package-lock.json
 
 # 打包输出（可执行文件走 Releases，不进版本库）
 dist/
