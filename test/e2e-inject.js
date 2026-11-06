@@ -1243,6 +1243,15 @@
     ok('F11b 结构里不含底图 base64',
       (localStorage.getItem('ws_autosave_v1') || '').indexOf('base64') < 0);
 
+    /* F11c 指纹缓存（避免每 1.5 秒重写几 MB）不能把换图拦住 */
+    f1.image = 'data:image/png;base64,CCC';
+    WS._ui.autosave();
+    ok('F11c 换底图后备份随之更新',
+      localStorage.getItem(k1) === 'data:image/png;base64,CCC',
+      String(localStorage.getItem(k1)).slice(-8));
+    f1.image = 'data:image/png;base64,AAA';     /* 还原，供 F12 断言 */
+    WS._ui.autosave();
+
     /* ---- F12 恢复：两层底图都能取回（旧版只有当前层一张）---- */
     f1.image = null;
     bFloor.image = null;

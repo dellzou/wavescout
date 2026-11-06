@@ -26,6 +26,7 @@
   /* 底图按楼层分键存：localStorage 一格里放不下多楼层的大图 */
   var IMG_KEY = 'ws_autosave_img_';
   var IMG_KEY_LEGACY = 'ws_autosave_img';   /* 1.8.2 及更早只有这一张（当前层） */
+  var backdropSig = {};   /* floorId → 上次写入的底图字符串（比对引用，避免重复写几 MB） */
 
   /* ============================================================
      选择集：单选 / 多选（框选）共用一套状态
@@ -3418,7 +3419,7 @@
       (b.floors || []).forEach(function (f) { floors.push(f); });
     });
 
-    /* ① 先清掉已删除楼层的陈旧底图，给后面的写入腾出配额 */
+    /* ① 先清掉已删除楼层的陈旧底图与指纹，给后面的写入腾出配额 */
     var live = {};
     floors.forEach(function (f) { live[IMG_KEY + f.id] = true; });
     try {
@@ -3427,16 +3428,24 @@
         if (k && k.indexOf(IMG_KEY) === 0 && !live[k]) localStorage.removeItem(k);
       }
     } catch (e) { /* 清理失败不影响主流程 */ }
+    for (var fid in backdropSig) {
+      if (!live[IMG_KEY + fid]) delete backdropSig[fid];
+    }
 
-    /* ② 逐层写入；超配额的那层跳过并计数 */
+    /* ② 逐层写入；超配额的那层跳过并计数。
+       底图 base64 动辄几百 KB，而自动保存每 1.5 秒跑一次，
+       没变过的楼层必须跳过 —— 比对字符串**引用**是 O(1)，
+       比每次重写几 MB 的同步 setItem 便宜得多（换图时引用才会变）。 */
     var written = {};
     var missing = 0;
     floors.forEach(function (f) {
       var key = IMG_KEY + f.id;
       if (!f.image) {
         try { localStorage.removeItem(key); } catch (e) {}
+        delete backdropSig[f.id];
         return;
       }
+      if (backdropSig[f.id] === f.image) { written[f.id] = true; return; }
       try {
         localStorage.setItem(key, f.image);
         written[f.id] = true;
@@ -3445,6 +3454,8 @@
         /* 别让上一次的旧图冒充本次的底图 */
         try { localStorage.removeItem(key); } catch (e2) {}
       }
+      /* 失败也记下指纹：同一张图不必每 1.5 秒重试一次 */
+      backdropSig[f.id] = f.image;
     });
 
     /* ③ 当前层的新键写成功了，就可以丢掉旧版的单张键（省下一张图的空间）；
