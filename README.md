@@ -119,7 +119,7 @@ build/          打包与验证脚本
 npm install             # 首次
 npm start               # 开发模式启动
 npm run build           # 目录版 → dist/
-npm run build:portable  # 单文件便携版 → dist-exe/
+npm run build:portable  # 单文件便携版 → dist-build/
 node build/e2e.js       # 端到端回归（需 Chrome）
 ```
 

@@ -177,7 +177,7 @@ window.WS = window.WS || {};
   WS.HEAT_FLOOR = WS.BANDS[WS.BANDS.length - 1].min;
 
   /* 平面编辑手感参数 —— 两个「默认值」同时也是滑条的中间值 */
-  WS.VERSION = '1.8.1';
+  WS.VERSION = '1.8.2';
 
   /* 底图压缩策略：dataURL 超过这个体积才尝试重编码；收益不到 15% 就保留原图。
      只对线稿/扫描件做一次（WebP 有损 q0.95），尺寸不变，坐标与标定不受影响。 */

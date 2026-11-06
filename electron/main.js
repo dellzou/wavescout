@@ -17,6 +17,7 @@
 const { app, BrowserWindow, Menu, dialog, shell, session, ipcMain, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 
 const APP_ID = 'com.aursen.wavescout';
 const APP_TITLE = '勘波 WaveScout';
@@ -241,6 +242,132 @@ function doClose() {
 }
 
 /* ------------------------------------------------------------
+   项目文件保存
+   目标：第一次保存弹一次框，之后 Ctrl+S 直接写回同一个文件
+   做法：主进程记住「项目名 → 路径」的映射，存在 userData 下
+   ------------------------------------------------------------ */
+function saveStateFile() {
+  return path.join(app.getPath('userData'), 'recent-save.json');
+}
+
+function readSaveState() {
+  try {
+    const o = JSON.parse(fs.readFileSync(saveStateFile(), 'utf8'));
+    return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function writeSaveState(all) {
+  try {
+    fs.writeFileSync(saveStateFile(), JSON.stringify(all), 'utf8');
+  } catch (e) { /* 记不住就下次再弹框，不致命 */ }
+}
+
+function setupSaveHandler() {
+  /* 保存 / 另存为。forceDialog=true 时强制弹框 */
+  ipcMain.handle('project:save', async function (evt, payload) {
+    const p = payload || {};
+    const filename = p.filename || '未命名项目.wssurvey.json';
+    const key = p.key || filename;
+    const content = (p.content == null) ? '' : String(p.content);
+    const all = readSaveState();
+    let target = null;
+
+    if (!p.forceDialog) {
+      const cached = all[key];
+      /* 目录还在就直接写回；文件被删了也没关系，writeFileSync 会重建 */
+      if (cached && fs.existsSync(path.dirname(cached))) target = cached;
+    }
+
+    if (!target) {
+      const parent = (mainWindow && !mainWindow.isDestroyed()) ? mainWindow : undefined;
+      const r = await dialog.showSaveDialog(parent, {
+        title: p.forceDialog ? '另存为' : '保存项目',
+        defaultPath: all[key] || path.join(app.getPath('documents'), filename),
+        filters: [
+          { name: 'WaveScout 项目', extensions: ['json', 'wssurvey'] },
+          { name: '所有文件', extensions: ['*'] }
+        ],
+        buttonLabel: '保存'
+      });
+      if (!r || r.canceled || !r.filePath) return { ok: false, cancelled: true };
+      target = r.filePath;
+    }
+
+    try {
+      fs.writeFileSync(target, content, 'utf8');
+    } catch (err) {
+      return { ok: false, error: String((err && err.message) || err), path: target };
+    }
+    all[key] = target;
+    writeSaveState(all);
+
+    /* 关窗时选了「先保存再退出」：保存走的是这条路（不再经过 will-download），
+       所以退出要在这里接上，否则窗口会卡在「尚未完成保存」的提示上 */
+    if (pendingClose) {
+      pendingClose = false;
+      setTimeout(doClose, 160);
+    }
+
+    return { ok: true, path: target };
+  });
+
+  /* 打开文件后，把真实路径登记成该项目的保存位置 */
+  ipcMain.handle('project:set-path', function (evt, payload) {
+    const p = payload || {};
+    if (!p.key || !p.path) return false;
+    const all = readSaveState();
+    all[p.key] = p.path;
+    writeSaveState(all);
+    return true;
+  });
+
+  /* 查询某项目是否已有记住的路径（界面提示用） */
+  ipcMain.handle('project:get-path', function (evt, key) {
+    const all = readSaveState();
+    return all[key] || null;
+  });
+}
+
+/* ------------------------------------------------------------
+   便携版：退出后清理 %TEMP% 里的解压目录
+   便携版 exe 是自解压包，每次运行把 230 MB 运行时解到
+   %TEMP%\<解压目录>，而且退出后不会自己删。留着有两个麻烦：
+     · 白占 230 MB
+     · 下次启动、或另一个实例同时在跑时，解压会撞上被占用的文件
+   这里在退出时起一个 detached 的 cmd，等进程真正退出后再删。
+   删不掉也不影响使用（下次启动会覆盖）。
+   ------------------------------------------------------------ */
+function schedulePortableCleanup() {
+  if (!process.env.PORTABLE_EXECUTABLE_FILE) return;   // 不是便携版
+
+  let target;
+  try { target = path.resolve(path.dirname(process.execPath)); } catch (e) { return; }
+
+  const tmpRoot = path.resolve(app.getPath('temp'));
+  const t = target.toLowerCase();
+  const tr = tmpRoot.toLowerCase();
+
+  /* 护栏：只删 %TEMP% 下面、名字以 WaveScout 开头的目录，避免误删 */
+  if (t === tr) return;
+  if (t.indexOf(tr + path.sep) !== 0) return;
+  if (!/^wavescout/i.test(path.basename(target))) return;
+
+  /* 退出的瞬间 exe/dll 还被系统持有，而且实测目录句柄会滞留十几秒，
+     所以不能只试一两次：循环重试 8 次、每次间隔约 1.5 秒。
+     删成功之后再执行是无害的（目录已不存在，报错被丢弃）。 */
+  const cmd =
+    'for /L %i in (1,1,8) do @(rmdir /s /q "' + target + '" 2>nul & ping 127.0.0.1 -n 2 >nul)';
+  try {
+    spawn('cmd.exe', ['/c', cmd], {
+      detached: true, stdio: 'ignore', windowsHide: true
+    }).unref();
+  } catch (e) { /* 忽略 */ }
+}
+
+/* ------------------------------------------------------------
    下载接管：所有 a[download] 都走原生另存为
    ------------------------------------------------------------ */
 function setupDownloadHandler() {
@@ -340,6 +467,7 @@ if (!gotLock) {
 
   app.whenReady().then(function () {
     hardenNavigation();
+    setupSaveHandler();
     setupDownloadHandler();
     createWindow();
 
@@ -350,6 +478,11 @@ if (!gotLock) {
 
   app.on('window-all-closed', function () {
     app.quit();
+  });
+
+  /* 退出前安排清理便携版解压目录（延迟到进程真正退出后执行） */
+  app.on('will-quit', function () {
+    schedulePortableCleanup();
   });
 
   // 渲染层请求退出（保存完成后由页面主动调用）

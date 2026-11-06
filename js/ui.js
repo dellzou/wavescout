@@ -1296,6 +1296,7 @@
     if (mod) {
       /* Ctrl+Shift+A —— 直接切到吸顶 AP 放置工具（必要时自动进入设备编辑） */
       if (k === 'a' && e.shiftKey) { e.preventDefault(); quickCeilingAp(); return; }
+      if (k === 's' && e.shiftKey) { e.preventDefault(); saveProject(true); return; }
       if (k === 's') { e.preventDefault(); saveProject(); return; }
       if (k === 'o') { e.preventDefault(); el.fileProject.click(); return; }
       if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
@@ -1609,12 +1610,44 @@
     rd.readAsDataURL(file);
   }
 
-  function saveProject() {
+  /* forceDialog = true 时强制弹框（另存为）；否则直接写回上次的路径 */
+  function saveProject(forceDialog) {
     var doc = S.doc || WS.wrapDoc(S.project);
     var name = (doc.name || '未命名项目').replace(/[\\/:*?"<>|]/g, '_');
-    var blob = new Blob([WS.serialize(doc)], { type: 'application/json' });
-    downloadBlob(blob, name + '.wssurvey.json');
-    if (!window.wsDesktop) S.dirty = false;
+    var filename = name + '.wssurvey.json';
+    var text = WS.serialize(doc);
+    var desk = window.wsDesktop;
+
+    /* 桌面版交给主进程：第一次弹框选路径，之后记在 userData 里，
+       Ctrl+S 直接写回同一个文件，不再打断操作 */
+    if (desk && desk.saveProjectFile) {
+      desk.saveProjectFile({
+        content: text, filename: filename, key: name, forceDialog: !!forceDialog
+      }).then(function (r) {
+        if (!r) return;
+        if (r.ok) {
+          S.dirty = false;
+          notifySaved(forceDialog ? '已另存为' : '项目已保存');
+          tip('已保存到 ' + r.path, 3000);
+        } else if (r.error) {
+          dialog({
+            title: '保存失败',
+            body: '<p>无法写入这个文件：</p><p style="color:var(--danger)">' +
+              escapeHtml(r.error) + '</p><p style="font-size:11px;color:var(--txt-3)">' +
+              '可能被其他程序占用，或该目录没有写入权限。</p>'
+          });
+        }
+        /* cancelled：用户自己取消的，不打扰 */
+      }).catch(function (err) {
+        dialog({ title: '保存失败', body: '<p>' + escapeHtml(String((err && err.message) || err)) + '</p>' });
+      });
+      return;
+    }
+
+    /* 网页版没有文件系统权限，只能触发浏览器下载 */
+    var blob = new Blob([text], { type: 'application/json' });
+    downloadBlob(blob, filename);
+    S.dirty = false;
     notifySaved('项目已保存');
   }
 
@@ -1624,6 +1657,13 @@
       try {
         var p = WS.deserialize(rd.result);
         applyProject(p);
+        /* 桌面版：记住这个文件的真实路径，之后 Ctrl+S 直接存回原文件 */
+        var desk = window.wsDesktop;
+        if (desk && desk.pathForFile && desk.setSavePath) {
+          var fp = desk.pathForFile(file);
+          var nm = ((S.doc && S.doc.name) || '未命名项目').replace(/[\\/:*?"<>|]/g, '_');
+          if (fp) desk.setSavePath(nm, fp);
+        }
         tip('已打开：' + p.name);
       } catch (err) {
         dialog({ title: '打开失败', body: '<p>文件解析出错：</p><p style="color:var(--danger)">' + escapeHtml(String(err.message || err)) + '</p>' });
@@ -1962,8 +2002,8 @@
         '<b style="color:var(--txt);display:block;margin-bottom:3px">导出热力图 PNG</b>' +
         '<span style="font-size:11px;color:var(--txt-3)">底图 + 热力图 + 障碍物 + 设备，可直接放进方案文档</span></button>' +
         '<button class="btn-s" id="expJson" style="text-align:left;padding:11px 14px">' +
-        '<b style="color:var(--txt);display:block;margin-bottom:3px">导出项目文件 (.json)</b>' +
-        '<span style="font-size:11px;color:var(--txt-3)">包含全部图层与参数，可再次打开继续编辑</span></button>' +
+        '<b style="color:var(--txt);display:block;margin-bottom:3px">另存为项目文件 (.json)…</b>' +
+        '<span style="font-size:11px;color:var(--txt-3)">另选路径存一份副本（Ctrl+Shift+S）；日常保存按 Ctrl+S 直接覆盖上次的文件</span></button>' +
         '<button class="btn-s" id="expCsv" style="text-align:left;padding:11px 14px">' +
         '<b style="color:var(--txt);display:block;margin-bottom:3px">导出设备清单 (.csv)</b>' +
         '<span style="font-size:11px;color:var(--txt-3)">AP 名称、安装方式、功率、位置坐标</span></button>' +
@@ -1975,7 +2015,7 @@
       var b2 = document.getElementById('expJson');
       var b3 = document.getElementById('expCsv');
       if (b1) b1.onclick = function () { closeModal(); exportPng(); };
-      if (b2) b2.onclick = function () { closeModal(); saveProject(); };
+      if (b2) b2.onclick = function () { closeModal(); saveProject(true); };
       if (b3) b3.onclick = function () { closeModal(); exportCsv(); };
     }, 20);
   }

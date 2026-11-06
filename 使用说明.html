@@ -35,7 +35,7 @@ blockquote p{margin:0;}
 </head>
 <body><div class="wrap">
 <h1>勘波 WaveScout · 使用说明</h1>
-<blockquote>WaveScout —— 平面图无线覆盖规划工具<br>版本 1.8.1 · 适用于 Windows 10 / Windows 11<br><br>作者：<b>邹宁</b>（2004-04-17，广东广州）<br>© 2026 邹宁 版权所有 All Rights Reserved.</blockquote>
+<blockquote>WaveScout —— 平面图无线覆盖规划工具<br>版本 1.8.2 · 适用于 Windows 10 / Windows 11<br><br>作者：<b>邹宁</b>（2004-04-17，广东广州）<br>© 2026 邹宁 版权所有 All Rights Reserved.</blockquote>
 <hr>
 <h2>一、怎么打开</h2>
 <p><b>桌面版（推荐）</b></p>
@@ -287,15 +287,19 @@ blockquote p{margin:0;}
 <p><b>最终覆盖效果必须现场实测验证</b>（建议用 Ekahau / NetSpot 或专业扫频工具做后验证）。</p>
 <hr>
 <h2>九、项目文件与导出</h2>
-<table><thead><tr><th>按钮</th><th>作用</th><th>产物</th></tr></thead><tbody><tr><td>保存</td><td>保存完整项目（含底图、比例尺、所有图层与参数）</td><td><code>项目名.wssurvey.json</code></td></tr><tr><td>打开</td><td>载入保存的项目文件</td><td>—</td></tr><tr><td>导出 ▸ 导出热力图 PNG</td><td>底图 + 热力图 + 墙 + AP + 图例 + 比例尺</td><td><code>项目名-热力图.png</code></td></tr><tr><td>导出 ▸ 导出设备清单</td><td>AP 名称、安装方式、功率、坐标</td><td><code>项目名-设备清单.csv</code></td></tr></tbody></table>
+<table><thead><tr><th>按钮</th><th>作用</th><th>产物</th></tr></thead><tbody><tr><td>保存</td><td>保存完整项目（含底图、比例尺、所有图层与参数）</td><td><code>项目名.wssurvey.json</code></td></tr><tr><td>打开</td><td>载入保存的项目文件</td><td>—</td></tr><tr><td>导出 ▸ 另存为项目文件</td><td>另选路径存一份副本</td><td><code>项目名.wssurvey.json</code></td></tr><tr><td>导出 ▸ 导出热力图 PNG</td><td>底图 + 热力图 + 墙 + AP + 图例 + 比例尺</td><td><code>项目名-热力图.png</code></td></tr><tr><td>导出 ▸ 导出设备清单</td><td>AP 名称、安装方式、功率、坐标</td><td><code>项目名-设备清单.csv</code></td></tr></tbody></table>
+<p><b>保存会记住位置</b>：第一次保存弹一次框，选好路径之后，<code>Ctrl+S</code> 或顶栏「保存」就<b>直接覆盖那个文件</b>，</p>
+<p>不再弹框。想换路径或另存一份，用 <code>Ctrl+Shift+S</code>（或「导出 ▸ 另存为项目文件」）。</p>
 <ul>
+<li>用「打开」载入的文件，<code>Ctrl+S</code> 会直接存回<b>原文件</b></li>
+<li>路径按项目名分别记忆，多个项目互不干扰；记录存在 <code>%APPDATA%\WaveScout\recent-save.json</code></li>
 <li>项目文件是纯 JSON，底图以 base64 内嵌，<b>单个文件即可完整传递</b></li>
 <li>编辑过程会<b>自动保存到本机</b>（每 1.5 秒），意外关闭后重新打开会自动恢复</li>
 <li>自动保存只保留最近一份，正式成果请务必手动「保存」成文件</li>
 </ul>
 <hr>
 <h2>十、快捷键</h2>
-<table><thead><tr><th>按键</th><th>作用</th><th>按键</th><th>作用</th></tr></thead><tbody><tr><td><code>V</code></td><td>选择工具</td><td><code>W</code> / <code>D</code> / <code>N</code></td><td>墙 / 门 / 窗</td></tr><tr><td><code>E</code></td><td>擦除</td><td><code>1</code> <code>2</code> <code>3</code></td><td>吸顶 / 壁挂 / 面板 AP</td></tr><tr><td><code>Tab</code></td><td>切换平面 / 设备模式</td><td><code>Esc</code></td><td>取消操作 / 退回选择工具</td></tr><tr><td><code>Ctrl+Shift+A</code></td><td>随时切到吸顶 AP</td><td></td><td></td></tr><tr><td><code>Delete</code></td><td>删除选中对象</td><td></td><td></td></tr><tr><td><code>Ctrl+Z</code></td><td>撤销</td><td><code>Ctrl+Y</code></td><td>重做</td></tr><tr><td><code>Ctrl+S</code></td><td>保存项目</td><td><code>Ctrl+O</code></td><td>打开项目</td></tr><tr><td><code>空格</code> + 拖拽</td><td>平移画布</td><td>滚轮</td><td>以光标为中心缩放</td></tr><tr><td>拖动空白处</td><td>平移画布</td><td><code>Shift</code> + 拖拽</td><td>正交 / 15° 步进</td></tr><tr><td><code>Ctrl</code> + 拖动</td><td>框选当前模式的对象</td><td><code>Alt+1</code> ~ <code>Alt+6</code></td><td>图层开关</td></tr></tbody></table>
+<table><thead><tr><th>按键</th><th>作用</th><th>按键</th><th>作用</th></tr></thead><tbody><tr><td><code>V</code></td><td>选择工具</td><td><code>W</code> / <code>D</code> / <code>N</code></td><td>墙 / 门 / 窗</td></tr><tr><td><code>E</code></td><td>擦除</td><td><code>1</code> <code>2</code> <code>3</code></td><td>吸顶 / 壁挂 / 面板 AP</td></tr><tr><td><code>Tab</code></td><td>切换平面 / 设备模式</td><td><code>Esc</code></td><td>取消操作 / 退回选择工具</td></tr><tr><td><code>Ctrl+Shift+A</code></td><td>随时切到吸顶 AP</td><td></td><td></td></tr><tr><td><code>Delete</code></td><td>删除选中对象</td><td></td><td></td></tr><tr><td><code>Ctrl+Z</code></td><td>撤销</td><td><code>Ctrl+Y</code></td><td>重做</td></tr><tr><td><code>Ctrl+S</code></td><td>保存（覆盖上次的文件）</td><td><code>Ctrl+Shift+S</code></td><td>另存为，重新选路径</td></tr><tr><td><code>Ctrl+O</code></td><td>打开项目</td><td></td><td></td></tr><tr><td><code>空格</code> + 拖拽</td><td>平移画布</td><td>滚轮</td><td>以光标为中心缩放</td></tr><tr><td>拖动空白处</td><td>平移画布</td><td><code>Shift</code> + 拖拽</td><td>正交 / 15° 步进</td></tr><tr><td><code>Ctrl</code> + 拖动</td><td>框选当前模式的对象</td><td><code>Alt+1</code> ~ <code>Alt+6</code></td><td>图层开关</td></tr></tbody></table>
 <p><b>图层快捷键</b>（顺序与左侧「图层」列表一致，按一次切换一次）：</p>
 <table><thead><tr><th>组合</th><th>图层</th><th>组合</th><th>图层</th></tr></thead><tbody><tr><td><code>Alt+1</code></td><td>热力图</td><td><code>Alt+4</code></td><td>米制网格</td></tr><tr><td><code>Alt+2</code></td><td>障碍物</td><td><code>Alt+5</code></td><td>天线方向图</td></tr><tr><td><code>Alt+3</code></td><td>无线设备</td><td><code>Alt+6</code></td><td>信号重叠</td></tr></tbody></table>
 <blockquote>为什么选 <code>Alt</code>：<code>Ctrl+C / V / X / A / S / Z / Y / O / P</code> 都是系统与编辑器的通用组合，<br><code>Ctrl+Shift+A</code> 已用于吸顶 AP，<code>Tab / Esc / Delete / 空格</code> 也已分配；<code>Alt+数字</code> 在 Windows 上<br>没有系统级用途（菜单栏已禁用），且与上述组合零重叠。<br>在名称等文本输入框里不会拦截，不影响中文输入法的 <code>Alt+数字</code> 选词。</blockquote>
@@ -323,7 +327,7 @@ blockquote p{margin:0;}
 │   └─ 勘波 WaveScout/
 │       ├─ 勘波 WaveScout.exe
 │       └─ (Electron 运行时文件，勿删勿改)
-├─ dist-exe/                        ← 【单文件版】只拷这一个 exe 就能用
+├─ dist-build/                        ← 【单文件版】只拷这一个 exe 就能用
 │   └─ 勘波 WaveScout v1.8.1 便携版.exe
 ├─ index.html                   网页版入口
 ├─ 启动.vbs                     网页版启动器
@@ -342,17 +346,28 @@ blockquote p{margin:0;}
 <p>改了 <code>js/</code> 下的代码后，桌面版不会自动更新，需要重新打包：</p>
 <pre><code>npm install            # 首次
 npm run build          # 目录版 → dist/          约 3 秒
-npm run build:portable # 单文件版 → dist-exe/    约 4 分钟（最高压缩）</code></pre>
+npm run build:portable # 单文件版 → dist-build/    约 4 分钟（最高压缩）</code></pre>
 <blockquote><code>node_modules/</code> 只是构建期依赖，分发时不需要，可以删掉（不影响已打好的 exe）。</blockquote>
 <h3>两个版本怎么选</h3>
-<table><thead><tr><th></th><th>目录版（<code>dist/</code>）</th><th>单文件版（<code>dist-exe/</code>）</th></tr></thead><tbody><tr><td>形态</td><td>exe + 一批 dll + resources 文件夹</td><td><b>一个 exe</b></td></tr><tr><td>体积</td><td>目录 269 MB</td><td><b>单文件 74 MB</b>（内部仍是 230 MB）</td></tr><tr><td>分发</td><td>必须整个目录打包压缩后传</td><td>直接发这一个文件</td></tr><tr><td>启动</td><td>双击即开</td><td>双击后先自解压到 <code>%TEMP%</code>，<b>首次约 2~5 秒</b>，之后走缓存</td></tr><tr><td>适合</td><td>自己本机固定使用</td><td><b>发给同事、放 U 盘、临时换机器</b></td></tr></tbody></table>
+<table><thead><tr><th></th><th>目录版（<code>dist/</code>）</th><th>单文件版（<code>dist-build/</code>）</th></tr></thead><tbody><tr><td>形态</td><td>exe + 一批 dll + resources 文件夹</td><td><b>一个 exe</b></td></tr><tr><td>体积</td><td>目录 269 MB</td><td><b>单文件 74 MB</b>（内部仍是 230 MB）</td></tr><tr><td>分发</td><td>必须整个目录打包压缩后传</td><td>直接发这一个文件</td></tr><tr><td>启动</td><td>双击即开</td><td>双击后先自解压到 <code>%TEMP%</code>，<b>首次约 2~5 秒</b>，之后走缓存</td></tr><tr><td>适合</td><td>自己本机固定使用</td><td><b>发给同事、放 U 盘、临时换机器</b></td></tr></tbody></table>
 <p>单文件版的原理：exe 本身是个自解压包，运行时把内部 230 MB 解到</p>
-<p><code>%TEMP%\WaveScout-&lt;版本号&gt;\</code> 再启动。所以：</p>
+<p><code>%TEMP%\WaveScout-&lt;版本号&gt;\</code> 再启动。</p>
+<p><b>退出时会自动清掉这个目录里的文件</b>。这么做是为了两件事：一是别白占 230 MB，</p>
+<p>二是下次启动不会撞上被占用的旧文件（那会导致解压失败）。</p>
+<p>因此：</p>
 <ul>
-<li><b>不要</b>把它放在只读介质上运行（如刻录光盘）；</li>
-<li><code>%TEMP%</code> 所在磁盘需要至少 <b>300 MB</b> 空闲；</li>
-<li>首次启动慢是正常的，第二次起快很多；</li>
-<li>不同版本的便携版解压到各自目录，可以共存，互不覆盖。</li>
+<li><b>每次启动都要解压</b>，约 3~5 秒，这是单文件形态的固定代价；想要秒开就用目录版</li>
+<li><b>不要同时开两个实例</b>（第二个会激活已有窗口）；也别在程序运行时手动删那个临时目录</li>
+<li>程序被强制结束（任务管理器结束进程、蓝屏）时来不及清理，会留下完整的一份 230 MB，</li>
+</ul>
+<p>  下次启动会覆盖它；想手动清理，删 <code>%TEMP%\WaveScout-*</code> 即可</p>
+<ul>
+<li>Windows 有时会短暂占用目录句柄，导致退出后<b>残留一个空目录</b>（里面没有文件，不占空间），</li>
+</ul>
+<p>  下次启动会复用它，不影响使用</p>
+<ul>
+<li><b>不要</b>把 exe 放在只读介质上运行（如刻录光盘）</li>
+<li><code>%TEMP%</code> 所在磁盘需要至少 <b>300 MB</b> 空闲</li>
 </ul>
 <hr>
 <h2>十三、已知限制与设计取舍</h2>

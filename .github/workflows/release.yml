@@ -38,18 +38,18 @@ jobs:
 
       - name: List output
         shell: pwsh
-        run: Get-ChildItem dist-exe -Filter *.exe | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
+        run: Get-ChildItem dist-build -Filter *.exe | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
       - name: Checksum
         shell: bash
-        run: sha256sum dist-exe/*.exe
+        run: sha256sum dist-build/*.exe
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           name: 勘波 WaveScout ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          files: dist-exe/*.exe
+          files: dist-build/*.exe
           fail_on_unmatched_files: true
           body: |
             Windows 10 / 11 x64 单文件便携版，双击即用，无需安装任何运行环境。

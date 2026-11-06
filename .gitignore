@@ -24,3 +24,7 @@ desktop.ini
 
 # 本地项目文件
 *.wssurvey.json
+
+# 本地验证用的临时构建目录
+dist-verify*/
+dist-build/
