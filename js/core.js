@@ -1122,26 +1122,53 @@ window.WS = window.WS || {};
   var LUT_STEP = 0.05;
   var LUT_N = Math.round((LUT_MAX - LUT_MIN) / LUT_STEP) + 1;
   var LUT_INV = 1 / LUT_STEP;
-  var BLEND_DB = 0.65;
   var _lut = null;
 
-  function blendColor(v, bi) {
-    var b = WS.BANDS[bi];
-    var rgb = b.rgb;
-    var next = (bi + 1 < WS.BANDS.length) ? WS.BANDS[bi + 1] : null;
-    if (!next) return rgb;
+  /* ------------------------------------------------------------
+     连续色标：锚点处为纯色，锚点之间线性插值。
+     相邻两档的交界处正好落在两锚点中间，颜色自然等于两色中点，
+     所以跨档不再出现硬边（旧实现只在边界上做 0.65 dB 窄过渡，
+     占档宽不到 7%，肉眼仍是一条硬线）。
 
-    var dv = v - b.min;          // 距本档下界（与更弱一档的分界）的距离
-    if (dv >= 0 && dv < BLEND_DB) {
-      var t = dv / BLEND_DB;     // 0 = 贴边界（取更弱档色），1 = 完全本档色
-      var n = next.rgb;
-      return [
-        n[0] + (rgb[0] - n[0]) * t,
-        n[1] + (rgb[1] - n[1]) * t,
-        n[2] + (rgb[2] - n[2]) * t
-      ];
+     锚点取各档区间中点：极强 -45、强 -55、良好 -63.5、一般 -71、弱 -80。
+     绿 → 紫之间额外插一个青绿锚点：RGB 直接插值会经过灰蓝
+     (101,141,170)，与「无信号」的灰 (122,134,152) 几乎同色，
+     看上去像一整片盲区，容易误读。
+     ------------------------------------------------------------ */
+  WS.HEAT_STOPS = [
+    { v: -45,   rgb: [239, 68, 68]  },   // 极强 · 红
+    { v: -55,   rgb: [249, 115, 22] },   // 强   · 橙
+    { v: -63.5, rgb: [250, 204, 21] },   // 良好 · 黄
+    { v: -71,   rgb: [34, 197, 94]  },   // 一般 · 绿
+    { v: -75.5, rgb: [45, 212, 191] },   // 过渡 · 青绿（仅参与插值，不对应档位）
+    { v: -80,   rgb: [168, 85, 247] }    // 弱   · 紫
+  ];
+
+  /* 任意 RSSI → 连续颜色；超出两端时取端色 */
+  WS.heatColorAt = function (v) {
+    var st = WS.HEAT_STOPS;
+    var last = st.length - 1;
+    if (!isFinite(v)) return null;
+    if (v >= st[0].v) return st[0].rgb;
+    if (v <= st[last].v) return st[last].rgb;
+    for (var i = 0; i < last; i++) {
+      var a = st[i], b = st[i + 1];
+      if (v <= a.v && v >= b.v) {
+        var t = (v - b.v) / (a.v - b.v);        // 0 = 弱端，1 = 强端
+        return [
+          b.rgb[0] + (a.rgb[0] - b.rgb[0]) * t,
+          b.rgb[1] + (a.rgb[1] - b.rgb[1]) * t,
+          b.rgb[2] + (a.rgb[2] - b.rgb[2]) * t
+        ];
+      }
     }
-    return rgb;
+    return st[0].rgb;
+  };
+
+  /* 兼容旧调用点：仍然接受 (v, bandIndex)，颜色只取决于 v */
+  function blendColor(v, bi) {
+    var c = WS.heatColorAt(v);
+    return c || WS.BANDS[bi].rgb;
   }
 
   function ensureLut() {

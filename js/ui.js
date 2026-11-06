@@ -2310,6 +2310,12 @@
     }
   }
 
+  /* 颜色数组 → CSS 颜色串 */
+  function rgbCss(c) {
+    if (!c) return '#7a8698';
+    return 'rgb(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ')';
+  }
+
   function buildLegend() {
     var th = curMinRssi();
     var html = '';
@@ -2319,8 +2325,13 @@
       var rangeTxt = (next !== null) ? (b.min + ' ~ ' + next) : ('≥ ' + b.min);
       // 该档中最强的信号仍低于门限 → 整档不达标，淡显
       var dim = (b.min < th);
+      /* 色块用该档「强端 → 弱端」的渐变，与画面上的连续色标一致；
+         相邻两行在交界处取同一个值，颜色自然接上，不再是一排纯色块 */
+      var hi = (i === 0) ? (b.min + 10) : WS.BANDS[i - 1].min;
+      var cHi = rgbCss(WS.heatColorAt(hi));
+      var cLo = rgbCss(WS.heatColorAt(b.min));
       html += '<div class="legend-row"' + (dim ? ' style="opacity:.42"' : '') + '>' +
-        '<i style="background:' + b.hex + '"></i>' +
+        '<i style="background:linear-gradient(90deg,' + cHi + ' 0%,' + cLo + ' 100%)"></i>' +
         '<span>' + b.name + '</span><b>' + rangeTxt + '</b></div>';
     }
     if (S.layers.overlap) {
