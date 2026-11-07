@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>抗锯齿对照</title>
+<style>
+  html,body{margin:0;background:#fff;font:14px/1.5 "Microsoft YaHei UI",sans-serif;color:#222}
+  .row{display:flex;gap:12px;padding:10px}
+  .cell{position:relative}
+  .cell b{position:absolute;left:8px;top:6px;background:#fff;padding:2px 8px;border:1px solid #ccc;border-radius:4px;font-weight:500}
+  canvas{display:block;border:1px solid #ddd}
+</style>
+</head>
+<body>
+<div class="row">
+  <div class="cell"><b id="t0">—</b><canvas id="c0"></canvas></div>
+  <div class="cell"><b id="t1">—</b><canvas id="c1"></canvas></div>
+  <div class="cell"><b id="t2">—</b><canvas id="c2"></canvas></div>
+</div>
+<script src="../js/core.js"></script>
+<script>
+/* 构造一个和现场类似的场景：混凝土房间，左墙留一个门洞，AP 在门外 */
+function scene() {
+  var p = WS.newProject();
+  p.imgW = 1200; p.imgH = 900; p.mpp = 0.02; p.calibrated = true;
+  p.settings.band = '5'; p.settings.channel = 36; p.settings.bw = 80;
+  p.settings.freq = WS.chMhz('5', 36);
+  var n = 0;
+  function W(x1, y1, x2, y2) {
+    return WS.normalizeObstacle({ id: 'o' + (n++), x1: x1, y1: y1, x2: x2, y2: y2, type: 'concrete', thick: 0.24 });
+  }
+  p.obstacles = [
+    W(200, 150, 200, 380), W(200, 520, 200, 750),     /* 左墙上下两段，中间 380~520 是门洞 */
+    W(200, 150, 900, 150), W(200, 750, 900, 750), W(900, 150, 900, 750)
+  ];
+  p.aps = [{ id: 'ap1', x: 100, y: 450, mount: 'ceiling', power: 20, gain: 4, azimuth: 0 }];
+  return p;
+}
+
+/* 把 heatToCanvas 的结果按 3 倍放大，并对「门洞附近」做裁剪 */
+var CROP = { x: 200, y: 250, w: 160, h: 130 }, SCALE = 7;
+
+function draw(id, label, aaGrid) {
+  WS.AA_GRID = aaGrid;
+  var p = scene();
+  var t0 = performance.now();
+  var heat = WS.computeHeat(p, 'high');
+  var ms = performance.now() - t0;
+  var src = WS.heatToCanvas(heat, WS.minRssiOf(p.settings), p.imgW, p.imgH);
+
+  var cv = document.getElementById(id);
+  cv.width = CROP.w * SCALE; cv.height = CROP.h * SCALE;
+  var g = cv.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+  g.imageSmoothingEnabled = (location.hash !== '#nearest');
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(src, CROP.x, CROP.y, CROP.w, CROP.h,
+              0, 0, cv.width, cv.height);
+
+  /* 叠一层墙体轮廓，方便对照位置（和软件里一样按中线画） */
+  g.strokeStyle = '#d76432'; g.lineWidth = 1.5;
+  p.obstacles.forEach(function (o) {
+    g.beginPath();
+    g.moveTo((o.x1 - CROP.x) * SCALE, (o.y1 - CROP.y) * SCALE);
+    g.lineTo((o.x2 - CROP.x) * SCALE, (o.y2 - CROP.y) * SCALE);
+    g.stroke();
+  });
+
+  document.getElementById(label).textContent =
+    (aaGrid ? '抗锯齿开（' + (aaGrid * aaGrid) + ' 点/格）' : '抗锯齿关（原样）') +
+    ' · ' + ms.toFixed(0) + ' ms';
+}
+
+try{draw('c0', 't0', 0);draw('c1', 't1', 2);draw('c2', 't2', 4);}catch(e){document.title='ERR:'+e.message;document.getElementById('t0').textContent='ERR '+e.message;}
+draw('c1', 't1', 4);
+document.title = 'ready';
+</script>
+</body>
+</html>

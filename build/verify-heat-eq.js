@@ -28,6 +28,8 @@ function loadCore(file) {
   vm.runInContext(fs.readFileSync(file, 'utf8'), ctx, { filename: file });
   const WS = ctx.window.WS;
   if (!WS) throw new Error('core.js 没有挂载 window.WS');
+  /* 抗锯齿会按设计改变边界格子的值，比对时统一关掉，只比传播模型本身 */
+  WS.AA_GRID = 0;
   return WS;
 }
 

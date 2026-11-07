@@ -177,7 +177,7 @@ window.WS = window.WS || {};
   WS.HEAT_FLOOR = WS.BANDS[WS.BANDS.length - 1].min;
 
   /* 软件版本（界面「关于」、导出文件与文档共用，改版本只改这一处） */
-  WS.VERSION = '1.8.4';
+  WS.VERSION = '1.8.5';
 
   /* 底图压缩策略：dataURL 超过这个体积才尝试重编码；收益不到 15% 就保留原图。
      只对线稿/扫描件做一次（WebP 有损 q0.95），尺寸不变，坐标与标定不受影响。 */
@@ -834,12 +834,42 @@ window.WS = window.WS || {};
     var sx1 = seg.x1, sy1 = seg.y1, sx2 = seg.x2, sy2 = seg.y2, nSeg = seg.n;
     var hitIdx = isHeat ? null : new Int32Array(nAp);
     var cellCount = 0;
-    var idx = 0;
 
-    for (var gy = 0; gy < gh; gy++) {
-      var py = (gy + 0.5) * cell;
-      for (var gx = 0; gx < gw; gx++, idx++) {
-        var px = (gx + 0.5) * cell;
+    /* ---- 两遍采样 ----
+       pass 0：每个格子取中心点（一直以来的做法）
+       pass 1：只对「跨阴影边界」的格子做 AA_GRID×AA_GRID 子采样，按功率平均
+
+       为什么需要第二遍：阴影边界是 25~30 dB 的硬阶跃（一整面混凝土的衰减）。
+       点采样时格子中心要么在亮侧、要么在暗侧，双线性插值的参数只能是 0 或 1，
+       等值线就被"吸"到网格线上 —— 斜边于是走成楼梯，这就是锯齿的来源。
+       子采样把每个格子变成"覆盖率"，插值参数变成连续值，等值线恢复连续。
+
+       注意是**功率平均**（mW）而不是 dB 平均：30 dB 的阶跃如果按 dB 平均，
+       会在墙两侧造出一条 15 dB 宽的假过渡带；按功率平均则只在半覆盖时降 3 dB，
+       边界仍然贴着墙，符合"墙很薄"的事实。 */
+    var subX = null, subY = null, subCell = null, subCells = null, acc = null, aaPer = 0;
+
+    for (var pass = 0; pass < 2; pass++) {
+      if (pass === 1) {
+        if (!isHeat) break;
+        /* 拖动时的草稿档优先响应速度，不做抗锯齿；停手后的精修再补 */
+        if (quality === 'draft') break;
+        var built = aaSubSamples(data, gw, gh, cell, WS.minRssiOf(st));
+        if (!built) break;
+        subX = built.x; subY = built.y; subCell = built.cell; subCells = built.cells; aaPer = built.per;
+        acc = new Float64Array(gw * gh);
+      }
+
+      var nSample = (pass === 0) ? (gw * gh) : subX.length;
+      for (var t = 0; t < nSample; t++) {
+        var px, py;
+        if (pass === 0) {
+          px = ((t % gw) + 0.5) * cell;
+          py = (((t / gw) | 0) + 0.5) * cell;
+        } else {
+          px = subX[t]; py = subY[t];
+        }
+
         var best = -200;
         var nHit = 0;
 
@@ -904,7 +934,8 @@ window.WS = window.WS || {};
           if (!isHeat && rssi >= limit) hitIdx[nHit++] = k;
         }
 
-        if (isHeat) { data[idx] = best; continue; }
+        if (pass === 1) { acc[subCell[t]] += dbToMw(best); continue; }
+        if (isHeat) { data[t] = best; continue; }
         if (nHit < 2) continue;
 
         /* 两两配对：频率区间有交叠即视为同频干扰 */
@@ -916,13 +947,118 @@ window.WS = window.WS || {};
             if (A1.lo < B1.hi && B1.lo < A1.hi) { marked = true; break; }
           }
         }
-        if (marked) { data[idx] = 1; cellCount++; }
+        if (marked) { data[t] = 1; cellCount++; }
+      }
+    }
+
+    /* 子采样结果写回：每个细化格子取 16 个点的功率平均 */
+    if (acc) {
+      for (var ci = 0; ci < subCells.length; ci++) {
+        var ii = subCells[ci];
+        data[ii] = mwToDb(acc[ii] / aaPer);   /* 必须除以采样数，否则等于把功率乘以 16 */
       }
     }
 
     return isHeat
       ? { gw: gw, gh: gh, cell: cell, data: data, empty: false }
       : { gw: gw, gh: gh, cell: cell, data: data, empty: cellCount === 0, count: cellCount, thr: limit };
+  }
+
+  /* ---------- 抗锯齿（超采样） ---------- */
+
+  /* 每格 AA_GRID×AA_GRID 个采样点。2 → 4 点：边界抖动降到约 2/3，代价约 +25%；
+     3 能再降一点但要 +50%，性价比明显变差（实测数据见 build/aa-metric 的推导）。
+     设为 0 可关闭抗锯齿（调试对照用） */
+  WS.AA_GRID = 2;
+  /* 最多细化 6% 的格子。细化的每格要付 9 个采样点的代价，6% → 最坏也就多 54% 的采样量；
+     超出预算就等距抽稀（宁可少修一部分，也不让一次重建卡住界面）。
+     典型办公室图纸实际只用到 0.5~2%，远低于这个上限 */
+  WS.AA_MAX_RATIO = 0.06;
+
+  /* dBm ↔ mW。-200 是「没有 AP 到达」的哨兵值，不能当真实电平参与平均 */
+  function dbToMw(db) {
+    return db <= -190 ? 0 : Math.pow(10, db / 10);
+  }
+  function mwToDb(mw) {
+    return mw > 0 ? 10 * Math.log10(mw) : -200;
+  }
+
+  /* 找出需要细化的格子，并生成它们的子采样点表；没有跨边界格子时返回 null。
+
+     判据只认「肉眼能看出台阶」的地方，而不是所有场强突变处：
+       ① 色带变了（跨 -50/-60/-67/-75/-85 任一条色阶分界）
+       ② 达标/未达标的透明度变了（跨覆盖门限 th）
+     因为台阶只在**颜色发生跳变**的那条线上才看得见；同色带内部的阴影边界
+     本来就是同一种颜色，细化它纯属浪费。按这个判据，代价与等值线总长成正比，
+     而不是与墙体数量成正比 —— 复杂图纸上差别能到 3~5 倍。 */
+  function aaSubSamples(data, gw, gh, cell, th) {
+    var picked = [];
+    var limit = Math.round(gw * gh * WS.AA_MAX_RATIO);
+    var B = WS.BANDS, nb = B.length, FLOOR = WS.HEAT_FLOOR;
+    var nCell = gw * gh;
+
+    /* 先把每格归成一个字节（色带序号 + 是否达标），之后只比字节。
+       直接在内层调 rssiBand 会退化成「每格 9 次分级判断」，反而比子采样还慢。 */
+    var cls = new Uint8Array(nCell);
+    for (var i = 0; i < nCell; i++) {
+      var v0 = data[i];
+      if (v0 < FLOOR) { cls[i] = 0; continue; }
+      var bi = 0;
+      for (var j = 0; j < nb; j++) { if (v0 >= B[j].min) { bi = j + 1; break; } }
+      cls[i] = (v0 >= th) ? (bi + 16) : bi;
+    }
+
+    for (var gy = 0; gy < gh; gy++) {
+      for (var gx = 0; gx < gw; gx++) {
+        var c0 = cls[gy * gw + gx];
+        var edge = false;
+        for (var oy = -1; oy <= 1 && !edge; oy++) {
+          var ny = gy + oy;
+          if (ny < 0 || ny >= gh) continue;
+          var row = ny * gw;
+          for (var ox = -1; ox <= 1; ox++) {
+            var nx = gx + ox;
+            if (nx < 0 || nx >= gw) continue;
+            if (cls[row + nx] !== c0) { edge = true; break; }
+          }
+        }
+        if (edge) picked.push(gy * gw + gx);
+      }
+    }
+    if (!picked.length) return null;
+
+    /* 超出预算就等距抽稀：宁可少修一部分，也不让一次重建卡住界面 */
+    if (picked.length > limit && limit > 0) {
+      var keep = [];
+      var step = picked.length / limit;
+      for (var i = 0; i < limit; i++) keep.push(picked[Math.floor(i * step)]);
+      picked = keep;
+    }
+
+    var G = WS.AA_GRID|0;
+    if (G < 2) return null;
+    var per = G * G;
+    var n = picked.length;
+    var xs = new Float32Array(n * per);
+    var ys = new Float32Array(n * per);
+    var own = new Int32Array(n * per);
+    var sub = cell / G;
+    var p = 0;
+
+    for (var q = 0; q < n; q++) {
+      var ci = picked[q];
+      var cx = (ci % gw) * cell;
+      var cy = ((ci / gw) | 0) * cell;
+      for (var sy = 0; sy < G; sy++) {
+        for (var sx = 0; sx < G; sx++) {
+          xs[p] = cx + (sx + 0.5) * sub;
+          ys[p] = cy + (sy + 0.5) * sub;
+          own[p] = ci;
+          p++;
+        }
+      }
+    }
+    return { x: xs, y: ys, cell: own, cells: picked, per: per };
   }
 
   WS.computeHeat = function (proj, quality) {

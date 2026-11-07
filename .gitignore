@@ -28,3 +28,8 @@ desktop.ini
 # 本地验证用的临时构建目录
 dist-verify*/
 dist-build/
+dist-local*/
+
+# 视觉对照图的中间产物（对照页 build/aa-compare.html 会生成）
+build/aa-*.png
+build/.old-core.js
