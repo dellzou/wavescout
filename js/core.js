@@ -177,7 +177,7 @@ window.WS = window.WS || {};
   WS.HEAT_FLOOR = WS.BANDS[WS.BANDS.length - 1].min;
 
   /* 软件版本（界面「关于」、导出文件与文档共用，改版本只改这一处） */
-  WS.VERSION = '1.8.3';
+  WS.VERSION = '1.8.4';
 
   /* 底图压缩策略：dataURL 超过这个体积才尝试重编码；收益不到 15% 就保留原图。
      只对线稿/扫描件做一次（WebP 有损 q0.95），尺寸不变，坐标与标定不受影响。 */

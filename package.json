@@ -1,7 +1,7 @@
 {
   "name": "wavescout",
   "productName": "WaveScout",
-  "version": "1.8.3",
+  "version": "1.8.4",
   "description": "勘波 WaveScout - 平面图无线覆盖规划工具",
   "main": "electron/main.js",
   "author": "邹宁 (2004-04-17, 广东广州)",
